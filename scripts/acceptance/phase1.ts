@@ -11,9 +11,12 @@ import {
   signLeadRequest,
 } from "@veridia/security"
 import {
+  ACCEPTANCE_EMAIL_PREFIX,
+  ACCEPTANCE_ORG_SLUG_PREFIX,
   fixture,
   guardEnvironment,
   readEnv,
+  turnstileOutcomeFromSecret,
   type AcceptanceEnv,
   type Fixture,
 } from "./config"
@@ -58,6 +61,13 @@ async function main() {
     const loaded = await loadFixture(admin)
     const credential = await requireActiveCredential(admin, loaded.siteId)
     await submitSecurityChecks(env, credential)
+    return
+  }
+
+  if (command === "turnstile-reject") {
+    const loaded = await loadFixture(admin)
+    const credential = await requireActiveCredential(admin, loaded.siteId)
+    await submitTurnstileReject(admin, env, credential)
     return
   }
 
@@ -265,13 +275,24 @@ async function submitSecurityChecks(
   })
   expectStatus("nonce replay", replay.status, [401])
 
-  const invalidTurnstile = await signedFetch(
-    env,
-    credential,
-    invalidTurnstileBody,
-    randomUUID(),
-  )
-  expectStatus("invalid Turnstile", invalidTurnstile.status, [403])
+  if (env.ACCEPTANCE_TURNSTILE_MODE === "real") {
+    const invalidTurnstile = await signedFetch(
+      env,
+      credential,
+      invalidTurnstileBody,
+      randomUUID(),
+    )
+    expectStatus("invalid Turnstile", invalidTurnstile.status, [403])
+  } else {
+    // Cloudflare test anahtarlarinda sonucu secret belirler, token degil.
+    // Uygulama `1x...AA` ile ayakta oldugu icin hicbir token 403 uretemez.
+    // Red senaryosu ayri kosuda `turnstile-reject` komutuyla dogrulanir.
+    console.log(
+      "invalid Turnstile: SKIPPED (test_keys modu) -> 'turnstile-reject' komutunu " +
+        "TURNSTILE_SECRET_KEY=2x0000000000000000000000000000000AA ile ayaga kaldirilmis " +
+        "uygulamaya karsi calistir.",
+    )
+  }
 
   const honeypot = await signedFetch(
     env,
@@ -286,6 +307,75 @@ async function submitSecurityChecks(
   expectStatus("honeypot", honeypot.status, [400])
 
   console.log("submit-security ok")
+}
+
+/**
+ * Turnstile red senaryosu.
+ *
+ * Test-key modunda sonucu secret belirledigi icin bu komut, uygulamanin
+ * "her zaman reddet" secret'i ile ayaga kaldirilmis olmasini bekler.
+ * Gecerli imzali bir istek gonderir ve 403 ile birlikte hicbir yan etki
+ * olusmadigini dogrular.
+ */
+async function submitTurnstileReject(
+  admin: AdminClient,
+  env: AcceptanceEnv,
+  credential: { keyId: string; secret: string },
+) {
+  if (
+    env.ACCEPTANCE_TURNSTILE_MODE === "test_keys" &&
+    turnstileOutcomeFromSecret(env.TURNSTILE_SECRET_KEY) !== "always_fails"
+  ) {
+    throw new Error(
+      "turnstile-reject requires the app to run with TURNSTILE_SECRET_KEY=" +
+        "2x0000000000000000000000000000000AA (always fails).",
+    )
+  }
+
+  const org = await requireOrganization(admin, fixture.orgSlug)
+
+  const countForOrg = async (table: "leads" | "outbox_events") => {
+    const { count: total, error } = await admin
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", org.id)
+    if (error) {
+      throw new Error(`${table} count failed: ${error.message}`)
+    }
+    return total ?? 0
+  }
+
+  const before = await Promise.all([
+    countForOrg("leads"),
+    countForOrg("outbox_events"),
+  ])
+
+  const body = JSON.stringify(
+    happyPayload(env.ACCEPTANCE_TURNSTILE_FAILURE_TOKEN),
+  )
+  const response = await signedFetch(env, credential, body, randomUUID())
+  expectStatus("turnstile reject", response.status, [403])
+
+  const after = await Promise.all([
+    countForOrg("leads"),
+    countForOrg("outbox_events"),
+  ])
+
+  if (before[0] !== after[0]) {
+    throw new Error(
+      `Turnstile reject created a lead: ${before[0]} -> ${after[0]}`,
+    )
+  }
+
+  if (before[1] !== after[1]) {
+    throw new Error(
+      `Turnstile reject created outbox events: ${before[1]} -> ${after[1]}`,
+    )
+  }
+
+  console.log(
+    `turnstile-reject ok status=403 leads=${after[0]} outbox=${after[1]} (degisim yok)`,
+  )
 }
 
 async function runWorker(env: AcceptanceEnv) {
@@ -343,33 +433,101 @@ async function verifyDatabase(admin: AdminClient) {
 }
 
 async function cleanup(admin: AdminClient) {
-  const org = await findOrganization(admin, fixture.orgSlug)
-  const orgB = await findOrganization(admin, fixture.orgBSlug)
-
-  for (const organizationId of [org?.id, orgB?.id].filter(Boolean)) {
-    const { error } = await admin
-      .from("organizations")
-      .delete()
-      .eq("id", organizationId as string)
-
-    if (error) {
-      throw new Error(`Cleanup failed: ${error.message}`)
-    }
-  }
-
-  for (const email of [
+  const targetSlugs = [fixture.orgSlug, fixture.orgBSlug]
+  const targetEmails = [
     fixture.ownerEmail,
     fixture.agentEmail,
     fixture.viewerEmail,
     fixture.orgBEmail,
-  ]) {
-    const userId = await findAuthUserId(admin, email)
-    if (userId) {
-      await admin.auth.admin.deleteUser(userId)
+  ]
+
+  // Silme yoluna girmeden once on ek dogrulamasi. Bir fixture sabiti
+  // yanlislikla gercek bir slug/email'e cevrilirse burada durur.
+  for (const slug of targetSlugs) {
+    if (!slug.startsWith(ACCEPTANCE_ORG_SLUG_PREFIX)) {
+      throw new Error(
+        `Refusing to delete organization "${slug}": missing "${ACCEPTANCE_ORG_SLUG_PREFIX}" prefix.`,
+      )
+    }
+  }
+  for (const email of targetEmails) {
+    if (!email.startsWith(ACCEPTANCE_EMAIL_PREFIX)) {
+      throw new Error(
+        `Refusing to delete user "${email}": missing "${ACCEPTANCE_EMAIL_PREFIX}" prefix.`,
+      )
     }
   }
 
-  console.log("cleanup ok")
+  const report = {
+    organizations: 0,
+    leads: 0,
+    outboxEvents: 0,
+    users: 0,
+  }
+
+  for (const slug of targetSlugs) {
+    const org = await findOrganization(admin, slug)
+    if (!org) continue
+
+    // Ikinci savunma hatti: veritabanindan donen slug da dogrulanir.
+    if (!org.slug.startsWith(ACCEPTANCE_ORG_SLUG_PREFIX)) {
+      throw new Error(
+        `Refusing to delete organization ${org.id}: slug "${org.slug}" is not an acceptance fixture.`,
+      )
+    }
+
+    const { count: leadCount } = await admin
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", org.id)
+    const { count: outboxCount } = await admin
+      .from("outbox_events")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", org.id)
+
+    const { error } = await admin
+      .from("organizations")
+      .delete()
+      .eq("id", org.id)
+
+    if (error) {
+      throw new Error(`Cleanup failed for ${slug}: ${error.message}`)
+    }
+
+    report.organizations += 1
+    report.leads += leadCount ?? 0
+    report.outboxEvents += outboxCount ?? 0
+  }
+
+  for (const email of targetEmails) {
+    const userId = await findAuthUserId(admin, email)
+    if (userId) {
+      const { error } = await admin.auth.admin.deleteUser(userId)
+      if (error) {
+        throw new Error(`Cleanup failed for user ${email}: ${error.message}`)
+      }
+      report.users += 1
+    }
+  }
+
+  // Dogrulama: fixture izleri gercekten kalmamis olmali.
+  const residue: string[] = []
+  for (const slug of targetSlugs) {
+    if (await findOrganization(admin, slug))
+      residue.push(`organization:${slug}`)
+  }
+  for (const email of targetEmails) {
+    if (await findAuthUserId(admin, email)) residue.push(`user:${email}`)
+  }
+
+  if (residue.length > 0) {
+    throw new Error(
+      `Cleanup incomplete, residue remains: ${residue.join(", ")}`,
+    )
+  }
+
+  console.log(`cleanup ok ${JSON.stringify(report)}`)
+  console.log("verified: no acceptance fixture residue remains")
 }
 
 function happyPayload(
@@ -526,7 +684,7 @@ async function upsertOrganization(
 async function findOrganization(admin: AdminClient, slug: string) {
   const { data, error } = await admin
     .from("organizations")
-    .select("id")
+    .select("id, slug")
     .eq("slug", slug)
     .maybeSingle()
 
@@ -783,6 +941,7 @@ Commands:
   seed             Create synthetic acceptance org/site/users/settings/credential
   submit-happy     Submit one signed happy-path lead
   submit-security  Exercise invalid HMAC, expired timestamp, nonce replay, Turnstile, honeypot
+  turnstile-reject Assert 403 + no side effects; app must run with the always-fails secret
   worker           Call the real staging worker endpoint
   verify-db        Print DB acceptance counters
   cleanup          Delete acceptance-prefixed fixture organizations and users

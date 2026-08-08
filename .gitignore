@@ -7,3 +7,6 @@ coverage
 dist
 *.tsbuildinfo
 .vercel
+supabase/.temp
+apps/*/AGENTS.md
+apps/*/CLAUDE.md

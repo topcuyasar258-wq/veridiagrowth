@@ -10,3 +10,8 @@ major_version = 15
 
 [auth]
 enabled = true
+site_url = "http://localhost:3001"
+additional_redirect_urls = [
+  "http://localhost:3001/**",
+  "http://localhost:3000/**",
+]

@@ -68,7 +68,7 @@ The harness creates only synthetic data:
 - `acceptance.agent@example.com`
 - `acceptance.viewer@example.com`
 - `acceptance.orgb.owner@example.com`
-- `acceptance_veridia_demo_business`
-- `acceptance_veridia_demo_other_business`
+- `acceptance-veridia-demo-business`
+- `acceptance-veridia-demo-other-business`
 
 The controlled email recipient must be an acceptance-only address, such as `acceptance@example.test` or an address containing `+acceptance`.

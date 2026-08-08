@@ -274,6 +274,16 @@ export async function getLeadDetail(leadId: string): Promise<{
 
 export async function getDashboardCounts() {
   const context = await getDashboardContext()
+
+  if (!context.organizationId) {
+    return {
+      total: 0,
+      newCount: 0,
+      contactedCount: 0,
+      suspiciousCount: 0,
+    }
+  }
+
   const supabase = await createLeadUserClient()
 
   const base = () =>

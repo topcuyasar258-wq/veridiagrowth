@@ -14,7 +14,8 @@
     "lint": "npm run lint -ws --if-present",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "test:client-bundle-secret": "NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon SUPABASE_SERVICE_ROLE_KEY=veridia_service_role_bundle_canary VERIDIA_CREDENTIAL_ENCRYPTION_KEYS=v1:dmVyaWRpYV9lbmNyeXB0aW9uX2tleV9jYW5hcnlfMDEy TURNSTILE_SECRET_KEY=turnstile_bundle_canary VERIDIA_IP_RISK_KEY=ip_risk_bundle_canary RESEND_API_KEY=resend_bundle_canary VERIDIA_WORKER_SECRET=worker_secret_bundle_canary npm run build && ! rg \"veridia_service_role_bundle_canary|veridia_encryption_key_canary_012|turnstile_bundle_canary|ip_risk_bundle_canary|resend_bundle_canary|worker_secret_bundle_canary|VERIDIA_CREDENTIAL_ENCRYPTION_KEYS|SUPABASE_SERVICE_ROLE_KEY|TURNSTILE_SECRET_KEY|VERIDIA_IP_RISK_KEY|RESEND_API_KEY|VERIDIA_WORKER_SECRET\" apps/dashboard/.next/static",
+    "scan:client-bundle": "tsx scripts/security/scan-client-bundle.ts",
+    "test:client-bundle-secret": "NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon SUPABASE_SERVICE_ROLE_KEY=veridia_service_role_bundle_canary VERIDIA_CREDENTIAL_ENCRYPTION_KEYS=v1:dmVyaWRpYV9lbmNyeXB0aW9uX2tleV9jYW5hcnlfMDEy TURNSTILE_SECRET_KEY=turnstile_bundle_canary VERIDIA_IP_RISK_KEY=ip_risk_bundle_canary RESEND_API_KEY=resend_bundle_canary VERIDIA_WORKER_SECRET=worker_secret_bundle_canary npm run build && npm run scan:client-bundle",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "npm run typecheck -ws --if-present"
