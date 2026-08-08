@@ -20,7 +20,7 @@ begin
 
   if jsonb_typeof($1) = 'object' then
     for entry in
-      select object_entry.object_key, object_entry.object_value as nested_value
+      select object_entry.object_key as key, object_entry.object_value as nested_value
       from jsonb_each($1) as object_entry(object_key, object_value)
     loop
       if entry.key ~* '(password|secret|client[_-]?secret|site[_-]?secret|token|access[_-]?token|refresh[_-]?token|authorization|cookie|set[_-]?cookie|signature|x[_-]?veridia[_-]?signature|supabase[_-]?service[_-]?role[_-]?key|ciphertext|(^|[_-])iv($|[_-])|auth(entication)?[_-]?tag|(^|[_-])tag($|[_-])|message|session|jwt|api[_-]?key|email|phone|address|ip)' then
