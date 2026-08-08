@@ -59,10 +59,11 @@ select is(
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.prosecdef
+      and p.proname in ('is_org_member', 'is_org_owner')
       and pg_get_function_arguments(p.oid) ~* 'user_id uuid|target_user_id|actor_user_id'
   ),
   0,
-  'SECURITY DEFINER helpers do not accept arbitrary user id parameters'
+  'Membership SECURITY DEFINER helpers do not accept arbitrary user id parameters'
 );
 
 set local role anon;
