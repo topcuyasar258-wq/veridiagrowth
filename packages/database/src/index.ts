@@ -721,6 +721,67 @@ export interface Database {
         }
         Returns: undefined
       }
+      update_customer_lead_status: {
+        Args: {
+          target_lead_id: string
+          expected_version: number
+          next_status: string
+          status_note?: string | null
+        }
+        Returns: Json
+      }
+      add_customer_lead_note: {
+        Args: {
+          target_lead_id: string
+          note_body: string
+        }
+        Returns: Json
+      }
+      assign_customer_lead: {
+        Args: {
+          target_lead_id: string
+          expected_version: number
+          assignee_user_id: string | null
+        }
+        Returns: Json
+      }
+      list_customer_leads: {
+        Args: {
+          target_organization_id: string
+          search_query?: string | null
+          status_filter?: string | null
+          source_filter?: string | null
+          assignee_filter?: string | null
+          unassigned_only?: boolean
+          site_filter?: string | null
+          created_after?: string | null
+          page_limit?: number
+          page_offset?: number
+        }
+        Returns: (Pick<
+          Database["public"]["Tables"]["leads"]["Row"],
+          | "id"
+          | "organization_id"
+          | "site_id"
+          | "first_name"
+          | "last_name"
+          | "phone"
+          | "phone_normalized"
+          | "email"
+          | "service"
+          | "city"
+          | "status"
+          | "assigned_to"
+          | "is_duplicate"
+          | "duplicate_of"
+          | "is_suspicious"
+          | "suspicion_reasons"
+          | "source_category"
+          | "version"
+          | "last_activity_at"
+          | "created_at"
+        > & { total_count: number })[]
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

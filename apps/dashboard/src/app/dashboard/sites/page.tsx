@@ -26,16 +26,20 @@ export default async function SitesPage() {
   const visibleSites: SiteListItem[] = sites ?? []
 
   return (
-    <main className="shell">
-      <h1>Sites</h1>
+    <main className="shell wide">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Çalışma Alanı</p>
+          <h1>Siteler</h1>
+        </div>
+      </div>
       <section className="panel">
         {visibleSites.length > 0 ? (
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Organization</th>
+                <th>Site</th>
+                <th>Durum</th>
               </tr>
             </thead>
             <tbody>
@@ -43,13 +47,12 @@ export default async function SitesPage() {
                 <tr key={site.id}>
                   <td>{site.name}</td>
                   <td>{site.status}</td>
-                  <td>{site.organization_id}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <p className="muted">No sites are visible for this user.</p>
+          <p className="muted">Bu kullanıcı için görünür site yok.</p>
         )}
       </section>
     </main>

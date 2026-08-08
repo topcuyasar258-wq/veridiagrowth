@@ -1,51 +1,59 @@
 import Link from "next/link"
-import { redirect } from "next/navigation"
 
-import { createSupabaseServerUserClient } from "@/lib/supabase/server"
-
-type OrganizationListItem = {
-  id: string
-  name: string
-  slug: string
-  status: string
-}
+import {
+  getDashboardContext,
+  getDashboardCounts,
+} from "@/server/leads/repository"
 
 export default async function DashboardPage() {
-  const supabase = await createSupabaseServerUserClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/login")
-  }
-
-  const { data: memberships } = await supabase
-    .from("organizations")
-    .select("id, name, slug, status")
-    .limit(20)
-  const organizations: OrganizationListItem[] = memberships ?? []
+  const context = await getDashboardContext()
+  const counts = await getDashboardCounts()
 
   return (
-    <main className="shell">
-      <h1>Dashboard</h1>
-      <section className="panel">
-        <h2>Organizations</h2>
-        {organizations.length > 0 ? (
-          <ul>
-            {organizations.map((organization) => (
-              <li key={organization.id}>
-                {organization.name}{" "}
-                <span className="muted">/{organization.slug}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="muted">No organizations are visible for this user.</p>
-        )}
-        <Link className="button" href="/dashboard/sites">
-          View sites
+    <main className="shell wide">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">{context.organizationName}</p>
+          <h1>Genel Bakış</h1>
+        </div>
+        <Link className="button" href="/dashboard/leads">
+          Talepleri Aç
         </Link>
+      </div>
+
+      <section className="metrics-grid" aria-label="Talep özeti">
+        <article className="metric">
+          <span>Toplam Talep</span>
+          <strong>{counts.total}</strong>
+        </article>
+        <article className="metric">
+          <span>Yeni</span>
+          <strong>{counts.newCount}</strong>
+        </article>
+        <article className="metric">
+          <span>İletişime Geçildi</span>
+          <strong>{counts.contactedCount}</strong>
+        </article>
+        <article className="metric">
+          <span>İncelenmeli</span>
+          <strong>{counts.suspiciousCount}</strong>
+        </article>
+      </section>
+
+      <section className="panel stack">
+        <h2>Çalışma Alanı</h2>
+        <p className="muted">
+          Talepleri listeleyin, durumunu değiştirin, not ekleyin ve personel
+          atamasını yönetin.
+        </p>
+        <div className="action-row">
+          <Link className="button" href="/dashboard/leads">
+            Talepler
+          </Link>
+          <Link className="button secondary" href="/dashboard/sites">
+            Siteler
+          </Link>
+        </div>
       </section>
     </main>
   )

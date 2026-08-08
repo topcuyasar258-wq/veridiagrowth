@@ -5,7 +5,7 @@ import "./globals.css"
 
 export const metadata: Metadata = {
   title: "Veridia Lead Layer",
-  description: "Tenant foundation for Veridia Lead Layer.",
+  description: "Customer lead management dashboard for Veridia Lead Layer.",
 }
 
 export default function RootLayout({
@@ -15,10 +15,11 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <header className="nav">
-          <strong>Veridia Lead Layer</strong>
+          <strong>Veridia</strong>
           <nav className="nav-links" aria-label="Primary">
-            <Link href="/dashboard">Dashboard</Link>
-            <Link href="/dashboard/sites">Sites</Link>
+            <Link href="/dashboard">Genel Bakış</Link>
+            <Link href="/dashboard/leads">Talepler</Link>
+            <Link href="/dashboard/sites">Siteler</Link>
           </nav>
         </header>
         {children}
