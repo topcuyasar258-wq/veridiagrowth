@@ -130,8 +130,25 @@ select lives_ok(
 );
 
 select is((select count(*)::integer from public.leads), 2, 'Duplicate still creates a new lead');
-select ok((select is_duplicate from public.leads order by created_at desc, id desc limit 1), 'Newest matching lead is marked duplicate');
-select isnt((select duplicate_of from public.leads order by created_at desc, id desc limit 1), null, 'Duplicate points at original lead');
+select ok(
+  (
+    select l.is_duplicate
+    from public.leads l
+    join public.idempotency_records ir on ir.resource_id = l.id
+    where ir.id = '60000000-0000-0000-0000-000000000002'
+  ),
+  'Newest matching lead is marked duplicate'
+);
+select isnt(
+  (
+    select l.duplicate_of
+    from public.leads l
+    join public.idempotency_records ir on ir.resource_id = l.id
+    where ir.id = '60000000-0000-0000-0000-000000000002'
+  ),
+  null,
+  'Duplicate points at original lead'
+);
 select is((select count(*)::integer from public.security_events where event_type = 'lead.duplicate_detected'), 1, 'Duplicate security event is recorded');
 select is((select count(*)::integer from public.security_events where event_type = 'lead.suspicious_created'), 1, 'Suspicious lead event is recorded without rejecting');
 
