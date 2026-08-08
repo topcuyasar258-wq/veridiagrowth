@@ -33,6 +33,7 @@ export type IdempotencyStore = {
 export type IdempotencyClaimResult =
   | { status: "started"; record: IdempotencyRecord }
   | { status: "replay"; record: IdempotencyRecord }
+  | { status: "failed_replay"; record: IdempotencyRecord }
   | { status: "conflict" }
   | { status: "processing"; record: IdempotencyRecord }
 
@@ -58,6 +59,10 @@ export async function claimIdempotencyKey(input: {
       return { status: "replay", record: existing }
     }
 
+    if (existing.status === "failed") {
+      return { status: "failed_replay", record: existing }
+    }
+
     if (
       existing.status === "processing" &&
       existing.lockedUntil &&
@@ -77,9 +82,20 @@ export async function claimIdempotencyKey(input: {
 
   if (inserted === "conflict") {
     const concurrent = await input.store.find(input.siteId, idempotencyKeyHash)
-    return concurrent
-      ? { status: "processing", record: concurrent }
-      : { status: "conflict" }
+
+    if (!concurrent) {
+      return { status: "conflict" }
+    }
+
+    if (concurrent.status === "completed") {
+      return { status: "replay", record: concurrent }
+    }
+
+    if (concurrent.status === "failed") {
+      return { status: "failed_replay", record: concurrent }
+    }
+
+    return { status: "processing", record: concurrent }
   }
 
   return { status: "started", record: inserted }

@@ -59,7 +59,7 @@ select is(
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.prosecdef
-      and pg_get_functiondef(p.oid) ~* 'user_id uuid|target_user_id|actor_user_id'
+      and pg_get_function_arguments(p.oid) ~* 'user_id uuid|target_user_id|actor_user_id'
   ),
   0,
   'SECURITY DEFINER helpers do not accept arbitrary user id parameters'

@@ -59,9 +59,43 @@ describe("claimIdempotencyKey", () => {
       }),
     ).resolves.toEqual({ status: "conflict" })
   })
+
+  it("replays completed and failed records for the same request hash", async () => {
+    const store = createMemoryIdempotencyStore()
+    const now = new Date("2026-08-06T12:00:00.000Z")
+    const started = await claimIdempotencyKey({
+      siteId: "site-id",
+      idempotencyKey: "raw-idempotency-key",
+      rawBody: '{"safe":true}',
+      now,
+      lockSeconds: 30,
+      ttlSeconds: 86_400,
+      store,
+    })
+
+    if (started.status !== "started") {
+      throw new Error("expected started idempotency claim")
+    }
+
+    store.setStatus(started.record.id, "failed")
+
+    await expect(
+      claimIdempotencyKey({
+        siteId: "site-id",
+        idempotencyKey: "raw-idempotency-key",
+        rawBody: '{"safe":true}',
+        now,
+        lockSeconds: 30,
+        ttlSeconds: 86_400,
+        store,
+      }),
+    ).resolves.toMatchObject({ status: "failed_replay" })
+  })
 })
 
-function createMemoryIdempotencyStore(): IdempotencyStore {
+function createMemoryIdempotencyStore(): IdempotencyStore & {
+  setStatus(id: string, status: IdempotencyRecord["status"]): void
+} {
   const records = new Map<string, IdempotencyRecord>()
 
   return {
@@ -90,6 +124,13 @@ function createMemoryIdempotencyStore(): IdempotencyStore {
       }
       records.set(key, record)
       return record
+    },
+    setStatus(id, status) {
+      for (const [key, record] of records.entries()) {
+        if (record.id === id) {
+          records.set(key, { ...record, status })
+        }
+      }
     },
   }
 }

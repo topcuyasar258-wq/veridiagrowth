@@ -24,6 +24,13 @@ const leadMigration = readFileSync(
   ),
   "utf8",
 )
+const ingestionMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260808023000_lead_ingestion_outbox.sql",
+  ),
+  "utf8",
+)
 
 describe("tenant foundation migration", () => {
   it("enables RLS on every tenant table", () => {
@@ -87,5 +94,30 @@ describe("tenant foundation migration", () => {
     expect(leadMigration).toContain(
       "create unique index site_credentials_one_active_per_site_idx",
     )
+  })
+
+  it("adds lead ingestion outbox and telemetry tables without customer RLS exposure", () => {
+    for (const table of [
+      "outbox_events",
+      "domain_events",
+      "security_events",
+      "lead_rate_limits",
+    ]) {
+      expect(ingestionMigration).toContain(`create table public.${table}`)
+      expect(ingestionMigration).toContain(
+        `alter table public.${table} enable row level security`,
+      )
+      expect(ingestionMigration).toContain(
+        `revoke all on table public.${table} from anon, authenticated`,
+      )
+    }
+
+    expect(ingestionMigration).toContain(
+      "create or replace function public.complete_lead_ingestion",
+    )
+    expect(ingestionMigration).toContain(
+      "create unique index outbox_events_job_key_key",
+    )
+    expect(ingestionMigration).toContain("actor_type text not null default")
   })
 })
