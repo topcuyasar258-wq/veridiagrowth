@@ -12,7 +12,7 @@
     "lint": "npm run lint -ws --if-present",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "test:client-bundle-secret": "NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon SUPABASE_SERVICE_ROLE_KEY=veridia_service_role_bundle_canary VERIDIA_CREDENTIAL_ENCRYPTION_KEYS=v1:dmVyaWRpYV9lbmNyeXB0aW9uX2tleV9jYW5hcnlfMDEy npm run build && ! rg \"veridia_service_role_bundle_canary|veridia_encryption_key_canary_012|VERIDIA_CREDENTIAL_ENCRYPTION_KEYS|SUPABASE_SERVICE_ROLE_KEY\" apps/dashboard/.next/static",
+    "test:client-bundle-secret": "NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon SUPABASE_SERVICE_ROLE_KEY=veridia_service_role_bundle_canary VERIDIA_CREDENTIAL_ENCRYPTION_KEYS=v1:dmVyaWRpYV9lbmNyeXB0aW9uX2tleV9jYW5hcnlfMDEy RESEND_API_KEY=resend_bundle_canary VERIDIA_WORKER_SECRET=worker_secret_bundle_canary npm run build && ! rg \"veridia_service_role_bundle_canary|veridia_encryption_key_canary_012|resend_bundle_canary|worker_secret_bundle_canary|VERIDIA_CREDENTIAL_ENCRYPTION_KEYS|SUPABASE_SERVICE_ROLE_KEY|RESEND_API_KEY|VERIDIA_WORKER_SECRET\" apps/dashboard/.next/static",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "npm run typecheck -ws --if-present"

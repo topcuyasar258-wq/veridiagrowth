@@ -31,6 +31,13 @@ const ingestionMigration = readFileSync(
   ),
   "utf8",
 )
+const workerMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260808033000_outbox_worker_delivery.sql",
+  ),
+  "utf8",
+)
 
 describe("tenant foundation migration", () => {
   it("enables RLS on every tenant table", () => {
@@ -119,5 +126,28 @@ describe("tenant foundation migration", () => {
       "create unique index outbox_events_job_key_key",
     )
     expect(ingestionMigration).toContain("actor_type text not null default")
+  })
+
+  it("adds outbox worker delivery tables and claim functions", () => {
+    for (const table of [
+      "job_executions",
+      "delivery_attempts",
+      "dead_letter_events",
+      "notification_settings",
+    ]) {
+      expect(workerMigration).toContain(`create table public.${table}`)
+      expect(workerMigration).toContain(
+        `alter table public.${table} enable row level security`,
+      )
+    }
+
+    expect(workerMigration).toContain("for update skip locked")
+    expect(workerMigration).toContain(
+      "create or replace function public.claim_outbox_events",
+    )
+    expect(workerMigration).toContain("delivery_operations_logical_key")
+    expect(workerMigration).toContain(
+      "revoke all on table public.job_executions from anon, authenticated",
+    )
   })
 })

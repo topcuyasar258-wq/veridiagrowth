@@ -383,6 +383,7 @@ export interface Database {
           attempt_count: number
           locked_at: string | null
           locked_by: string | null
+          last_worker_id: string | null
           last_error_code: string | null
           last_error_at: string | null
           created_at: string
@@ -402,6 +403,7 @@ export interface Database {
           attempt_count?: number
           locked_at?: string | null
           locked_by?: string | null
+          last_worker_id?: string | null
           last_error_code?: string | null
           last_error_at?: string | null
           created_at?: string
@@ -474,6 +476,174 @@ export interface Database {
           updated_at?: string
         }
       >
+      job_executions: Table<
+        {
+          id: string
+          outbox_event_id: string
+          organization_id: string
+          job_key: string
+          event_type: string
+          attempt_number: number
+          worker_id: string
+          status: string
+          started_at: string
+          finished_at: string | null
+          duration_ms: number | null
+          error_code: string | null
+          error_category: string | null
+          error_message_safe: string | null
+          created_at: string
+        },
+        {
+          id?: string
+          outbox_event_id: string
+          organization_id: string
+          job_key: string
+          event_type: string
+          attempt_number: number
+          worker_id: string
+          status: string
+          started_at?: string
+          finished_at?: string | null
+          duration_ms?: number | null
+          error_code?: string | null
+          error_category?: string | null
+          error_message_safe?: string | null
+          created_at?: string
+        }
+      >
+      delivery_operations: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string | null
+          lead_id: string | null
+          channel: string
+          template_key: string
+          logical_delivery_key: string
+          status: string
+          provider_message_id: string | null
+          created_at: string
+          updated_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id?: string | null
+          lead_id?: string | null
+          channel: string
+          template_key: string
+          logical_delivery_key: string
+          status?: string
+          provider_message_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      >
+      delivery_attempts: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string | null
+          lead_id: string | null
+          outbox_event_id: string | null
+          delivery_operation_id: string | null
+          channel: string
+          provider: string
+          template_key: string
+          recipient_fingerprint: string
+          attempt_number: number
+          status: string
+          provider_message_id: string | null
+          provider_status: string | null
+          error_code: string | null
+          error_message_safe: string | null
+          sent_at: string | null
+          delivered_at: string | null
+          failed_at: string | null
+          created_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id?: string | null
+          lead_id?: string | null
+          outbox_event_id?: string | null
+          delivery_operation_id?: string | null
+          channel: string
+          provider: string
+          template_key: string
+          recipient_fingerprint: string
+          attempt_number: number
+          status: string
+          provider_message_id?: string | null
+          provider_status?: string | null
+          error_code?: string | null
+          error_message_safe?: string | null
+          sent_at?: string | null
+          delivered_at?: string | null
+          failed_at?: string | null
+          created_at?: string
+        }
+      >
+      dead_letter_events: Table<
+        {
+          id: string
+          outbox_event_id: string
+          organization_id: string
+          job_key: string
+          event_type: string
+          final_attempt_count: number
+          failure_code: string
+          failure_category: string
+          failure_message_safe: string | null
+          payload_reference: Json
+          dead_lettered_at: string
+          resolved_at: string | null
+          resolved_by: string | null
+          resolution_note: string | null
+          created_at: string
+        },
+        {
+          id?: string
+          outbox_event_id: string
+          organization_id: string
+          job_key: string
+          event_type: string
+          final_attempt_count: number
+          failure_code: string
+          failure_category: string
+          failure_message_safe?: string | null
+          payload_reference: Json
+          dead_lettered_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          resolution_note?: string | null
+          created_at?: string
+        }
+      >
+      notification_settings: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string | null
+          channel: string
+          recipient_email: string | null
+          enabled: boolean
+          created_at: string
+          updated_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id?: string | null
+          channel: string
+          recipient_email?: string | null
+          enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      >
     }
     Views: Record<string, never>
     Functions: {
@@ -505,6 +675,49 @@ export interface Database {
           event_name: string
           event_severity: string
           event_metadata: Json
+        }
+        Returns: undefined
+      }
+      claim_outbox_events: {
+        Args: {
+          worker_id: string
+          batch_size: number
+          lock_timeout_seconds: number
+        }
+        Returns: Database["public"]["Tables"]["outbox_events"]["Row"][]
+      }
+      finish_outbox_success: {
+        Args: {
+          target_outbox_event_id: string
+          target_worker_id: string
+        }
+        Returns: undefined
+      }
+      finish_outbox_failure: {
+        Args: {
+          target_outbox_event_id: string
+          target_worker_id: string
+          retryable: boolean
+          max_attempts: number
+          next_available_at: string
+          failure_code: string
+          failure_category: string
+          failure_message_safe: string
+        }
+        Returns: string
+      }
+      requeue_dead_letter_event: {
+        Args: {
+          target_dead_letter_id: string
+          actor_user_id: string
+        }
+        Returns: undefined
+      }
+      resolve_dead_letter_event: {
+        Args: {
+          target_dead_letter_id: string
+          actor_user_id: string
+          note: string
         }
         Returns: undefined
       }
