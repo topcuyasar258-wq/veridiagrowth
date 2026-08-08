@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@veridia/shared": ["../../packages/shared/src/index.ts"],
+      "@veridia/security": ["../../packages/security/src/index.ts"],
+      "@veridia/database": ["../../packages/database/src/index.ts"]
+    }
+  },
+  "include": ["*.ts"]
+}
