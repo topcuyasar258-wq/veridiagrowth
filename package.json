@@ -1,0 +1,32 @@
+{
+  "name": "veridia-lead-layer",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w apps/dashboard",
+    "dev": "npm run dev -w apps/dashboard",
+    "lint": "npm run lint -ws --if-present",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "test:client-bundle-secret": "NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon SUPABASE_SERVICE_ROLE_KEY=veridia_service_role_bundle_canary VERIDIA_CREDENTIAL_ENCRYPTION_KEYS=v1:dmVyaWRpYV9lbmNyeXB0aW9uX2tleV9jYW5hcnlfMDEy npm run build && ! rg \"veridia_service_role_bundle_canary|veridia_encryption_key_canary_012|VERIDIA_CREDENTIAL_ENCRYPTION_KEYS|SUPABASE_SERVICE_ROLE_KEY\" apps/dashboard/.next/static",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "npm run typecheck -ws --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@types/node": "^22.13.14",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.32.0",
+    "eslint-config-next": "^15.4.5",
+    "prettier": "^3.4.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.2.4"
+  }
+}
