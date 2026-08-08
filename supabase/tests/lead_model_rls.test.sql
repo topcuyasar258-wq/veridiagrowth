@@ -170,18 +170,12 @@ select lives_ok(
   'Agent can add append-only notes to own organization lead'
 );
 
-update public.lead_notes
-set body = 'edited'
-where lead_id = '40000000-0000-0000-0000-000000000001';
-
-select is(
-  (
-    select body
-    from public.lead_notes
-    where lead_id = '40000000-0000-0000-0000-000000000001'
-    limit 1
-  ),
-  'Agent note',
+select throws_ok(
+  $$ update public.lead_notes
+     set body = 'edited'
+     where lead_id = '40000000-0000-0000-0000-000000000001' $$,
+  '42501',
+  null,
   'Lead notes are append-only for customer roles'
 );
 
