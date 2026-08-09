@@ -37,6 +37,9 @@ jobs:
       - name: Apply migrations and seed
         run: supabase db reset
 
+      - name: Check SQL fixture arity
+        run: npm run check:sql-arity
+
       - name: Run SQL pgTAP tests
         run: supabase db test
 
@@ -51,6 +54,12 @@ jobs:
 
       - name: Vitest
         run: npm test
+
+      - name: Install Chromium for browser acceptance
+        run: npx playwright install --with-deps chromium
+
+      - name: Real browser acceptance
+        run: npm run test:browser
 
       - name: Build
         run: npm run build
