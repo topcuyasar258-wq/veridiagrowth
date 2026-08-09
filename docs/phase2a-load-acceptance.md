@@ -88,7 +88,11 @@ returned — then verifies no residue remains. Same pattern as the Phase 1
 acceptance cleanup, which is the one that found the trigger bug preventing any
 organization from being deleted at all.
 
-## Not covered
+## Covered elsewhere
 
-Real browser and Core Web Vitals acceptance are not implemented. See
-[tracker-cwv-acceptance.md](tracker-cwv-acceptance.md).
+Real browser acceptance, network PII capture, CSP behaviour and Core Web Vitals
+are complete and run in CI against real Chromium. See
+[tracker-cwv-acceptance.md](tracker-cwv-acceptance.md) and
+`tests/browser/`. They need no staging: the fixture server is local.
+
+The only thing still blocked is hosted load and concurrency.

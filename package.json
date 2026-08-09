@@ -20,10 +20,12 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "npm run typecheck -ws --if-present",
     "tracker:build": "tsx scripts/tracker/build.ts",
-    "load:phase2a": "tsx scripts/load/phase2a.ts"
+    "load:phase2a": "tsx scripts/load/phase2a.ts",
+    "test:browser": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "1.56.1",
     "@types/node": "^22.13.14",
     "@vitejs/plugin-react": "^4.3.4",
     "esbuild": "0.28.1",

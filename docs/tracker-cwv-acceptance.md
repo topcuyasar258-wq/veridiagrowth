@@ -2,53 +2,48 @@
 
 ## Status
 
-**NOT IMPLEMENTED.** No real-browser or CWV measurement has been run.
+**MEASURED.** Real Chromium, five interleaved runs, medians compared.
 
-## What exists
+| Metric              | Baseline | With tracker | Delta       | Budget   |
+| ------------------- | -------- | ------------ | ----------- | -------- |
+| LCP                 | 20.0 ms  | 20.0 ms      | **0.0 ms**  | ≤ 100 ms |
+| interaction latency | 7.80 ms  | 9.60 ms      | **1.80 ms** | ≤ 20 ms  |
+| CLS                 | 0.0000   | 0.0000       | **0.0000**  | < 0.01   |
 
-Slice 3 tests run under happy-dom, which does not lay out or paint. It cannot
-produce LCP, INP or CLS. What it does prove is the property that would cause a
-regression:
+Environment-dependent engineering guards, not a production SLA. The absolute
+numbers describe the machine that ran them; the delta between two runs of the
+same page in the same browser is what the tracker is responsible for.
 
-| Measurement                | Result                     |
-| -------------------------- | -------------------------- |
-| init, 50 links             | 0.073 ms                   |
-| init, 5000 links           | 0.180 ms                   |
-| listeners attached         | 2, regardless of page size |
-| click handling, 2000 links | 0.933 ms                   |
+## Method
 
-A 100× larger page costs 2.5× the initialisation time, not 100×. There is no DOM
-scan at startup, no per-link listener and no `MutationObserver`, so the tracker's
-cost does not scale with the customer's page.
+`tests/browser/cwv.spec.ts`. The same fixture page is loaded twice — once with
+the tracker artifact served, once with it 404ing — and the two are compared.
 
-## What is missing
+Runs are **interleaved**, not grouped, so a machine that gets busy partway
+through affects both arms equally. Five runs, median rather than mean, because a
+single sample on a shared runner measures the runner's mood as much as the code.
 
-Real Chromium (and ideally WebKit) measurement of:
+LCP and CLS come from `PerformanceObserver`. Interaction latency is measured as
+click dispatch to second animation frame, which is where synchronous work in the
+click path would appear; it is a proxy for INP, not INP itself.
 
-- LCP regression ≤ 100 ms
-- INP regression ≤ 20 ms
-- CLS delta < 0.01
-- zero uncaught tracker errors in a real console
-- real network capture of collector request bodies
-- CSP acceptance: correct policy, blocked `connect-src`, blocked `script-src`
-- real WhatsApp and `tel:` navigation not being prevented
+## Unmeasured is not passing
 
-The PII and fail-open properties these would confirm are already asserted under
-happy-dom, including real `Blob` payload decoding. A real browser would raise
-confidence; it is not currently the only evidence.
+The test asserts LCP was actually observed in at least one run. Without that,
+an observer that silently produced nothing would report a delta of zero and pass
+— the vacuous-pass shape this repo has been bitten by three times.
 
-## Why it is not done
+## Gate policy
 
-It needs a browser runner — Playwright or equivalent — plus browser binaries in
-CI, a served fixture page and a CSP fixture server. That is a meaningful piece of
-infrastructure and it was not built rather than being half-built and reported as
-if it had run.
+Not a hard CI gate. CWV numbers are environment-dependent and would flake on a
+shared runner. They are run in CI and reported; a serious regression fails
+because the budgets are asserted, but the budgets are deliberately generous.
 
-## When it is added
+Bundle budgets stay a hard gate: they are deterministic, and they are the input
+that actually drives this metric.
 
-CWV numbers are environment-dependent and flaky as a hard CI gate. They should be
-a documented acceptance measurement taken before a rollout, recorded in the
-rollout record.
+## Related structural evidence
 
-Bundle budgets stay a hard CI gate: they are deterministic, and they are the
-input that actually drives the metric.
+happy-dom measurements from slice 3 show the property behind these numbers: a
+100× larger page costs 2.5× initialisation, two listeners are attached whatever
+the page contains, and there is no DOM scan or `MutationObserver` at startup.

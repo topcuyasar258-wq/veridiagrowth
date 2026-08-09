@@ -52,6 +52,12 @@ jobs:
       - name: Vitest
         run: npm test
 
+      - name: Install Chromium for browser acceptance
+        run: npx playwright install --with-deps chromium
+
+      - name: Real browser acceptance
+        run: npm run test:browser
+
       - name: Build
         run: npm run build
 
