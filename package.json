@@ -19,7 +19,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "npm run typecheck -ws --if-present",
-    "tracker:build": "tsx scripts/tracker/build.ts"
+    "tracker:build": "tsx scripts/tracker/build.ts",
+    "load:phase2a": "tsx scripts/load/phase2a.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

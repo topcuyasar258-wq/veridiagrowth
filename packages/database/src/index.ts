@@ -815,6 +815,9 @@ export interface Database {
           version: string
           status: string
           notes_safe: string | null
+          artifact_sha256: string | null
+          loader_bytes: number | null
+          tracker_bytes: number | null
           created_at: string
           released_at: string | null
           updated_at: string
@@ -824,6 +827,9 @@ export interface Database {
           version: string
           status?: string
           notes_safe?: string | null
+          artifact_sha256?: string | null
+          loader_bytes?: number | null
+          tracker_bytes?: number | null
           created_at?: string
           released_at?: string | null
           updated_at?: string
@@ -1061,6 +1067,51 @@ export interface Database {
           throttle_seconds?: number
         }
         Returns: undefined
+      }
+      sweep_expired_interactions: {
+        Args: { batch_limit?: number }
+        Returns: {
+          deleted_accepted: number
+          deleted_suspicious: number
+          deleted_quarantined: number
+          deleted_quota_buckets: number
+        }[]
+      }
+      detect_event_anomalies: {
+        Args: {
+          window_minutes?: number
+          baseline_windows?: number
+          min_sample?: number
+          spike_multiplier?: number
+          rate_threshold?: number
+        }
+        Returns: number
+      }
+      publish_tracker_release: {
+        Args: {
+          in_version: string
+          in_artifact_sha256: string | null
+          in_loader_bytes: number | null
+          in_tracker_bytes: number | null
+          in_status?: string
+        }
+        Returns: string
+      }
+      activate_tracker_release: {
+        Args: { in_version: string }
+        Returns: string
+      }
+      rollback_tracker_release: {
+        Args: { in_to_version: string }
+        Returns: string
+      }
+      resolve_site_tracker_release: {
+        Args: { target_site_id: string }
+        Returns: {
+          version: string | null
+          artifact_sha256: string | null
+          pinned: boolean
+        }[]
       }
     }
     Enums: Record<string, never>
