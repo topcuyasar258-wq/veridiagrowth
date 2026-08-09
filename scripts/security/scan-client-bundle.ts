@@ -12,7 +12,13 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative } from "node:path"
 
-const BUNDLE_DIR = "apps/dashboard/.next/static"
+/**
+ * Every directory whose contents reach a browser.
+ *
+ * The tracker artifacts are included because they are served to customer pages
+ * and are therefore just as public as the dashboard bundle.
+ */
+const BUNDLE_DIRS = ["apps/dashboard/.next/static", "packages/tracker/dist"]
 
 /** Canary values injected by the build script, plus env var names that must never ship. */
 const NEEDLES = [
@@ -73,23 +79,29 @@ function walk(dir: string, acc: string[] = []): string[] {
 }
 
 function main() {
-  let stats
-  try {
-    stats = statSync(BUNDLE_DIR)
-  } catch {
-    unavailable(
-      `build ciktisi yok: ${BUNDLE_DIR} (once 'npm run build' calistir)`,
-    )
-  }
+  const files: string[] = []
 
-  if (!stats.isDirectory()) {
-    unavailable(`${BUNDLE_DIR} bir dizin degil`)
-  }
+  for (const dir of BUNDLE_DIRS) {
+    let stats
+    try {
+      stats = statSync(dir)
+    } catch {
+      unavailable(
+        `build ciktisi yok: ${dir} (once 'npm run build' ve 'npm run tracker:build' calistir)`,
+      )
+    }
 
-  const files = walk(BUNDLE_DIR)
+    if (!stats.isDirectory()) {
+      unavailable(`${dir} bir dizin degil`)
+    }
 
-  if (files.length === 0) {
-    unavailable(`${BUNDLE_DIR} bos - taranacak dosya yok`)
+    const found = walk(dir)
+
+    if (found.length === 0) {
+      unavailable(`${dir} bos - taranacak dosya yok`)
+    }
+
+    files.push(...found)
   }
 
   const needles = [...NEEDLES]

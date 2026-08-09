@@ -10,3 +10,4 @@ dist
 supabase/.temp
 apps/*/AGENTS.md
 apps/*/CLAUDE.md
+packages/tracker/dist

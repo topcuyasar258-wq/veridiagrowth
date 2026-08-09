@@ -40,6 +40,9 @@ jobs:
       - name: Run SQL pgTAP tests
         run: supabase db test
 
+      - name: Build tracker bundles and enforce budgets
+        run: npm run tracker:build
+
       - name: Typecheck
         run: npm run typecheck
 

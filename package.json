@@ -15,17 +15,20 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "scan:client-bundle": "tsx scripts/security/scan-client-bundle.ts",
-    "test:client-bundle-secret": "NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon SUPABASE_SERVICE_ROLE_KEY=veridia_service_role_bundle_canary VERIDIA_CREDENTIAL_ENCRYPTION_KEYS=v1:dmVyaWRpYV9lbmNyeXB0aW9uX2tleV9jYW5hcnlfMDEy TURNSTILE_SECRET_KEY=turnstile_bundle_canary VERIDIA_IP_RISK_KEY=ip_risk_bundle_canary RESEND_API_KEY=resend_bundle_canary VERIDIA_WORKER_SECRET=worker_secret_bundle_canary VERIDIA_EVENT_IP_RISK_KEY=event_ip_risk_bundle_canary npm run build && npm run scan:client-bundle",
+    "test:client-bundle-secret": "NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-anon SUPABASE_SERVICE_ROLE_KEY=veridia_service_role_bundle_canary VERIDIA_CREDENTIAL_ENCRYPTION_KEYS=v1:dmVyaWRpYV9lbmNyeXB0aW9uX2tleV9jYW5hcnlfMDEy TURNSTILE_SECRET_KEY=turnstile_bundle_canary VERIDIA_IP_RISK_KEY=ip_risk_bundle_canary RESEND_API_KEY=resend_bundle_canary VERIDIA_WORKER_SECRET=worker_secret_bundle_canary VERIDIA_EVENT_IP_RISK_KEY=event_ip_risk_bundle_canary npm run build && npm run tracker:build && npm run scan:client-bundle",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "npm run typecheck -ws --if-present"
+    "typecheck": "npm run typecheck -ws --if-present",
+    "tracker:build": "tsx scripts/tracker/build.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@types/node": "^22.13.14",
     "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "0.28.1",
     "eslint": "^9.32.0",
     "eslint-config-next": "^15.4.5",
+    "happy-dom": "20.11.2",
     "prettier": "^3.4.2",
     "tsx": "^4.23.11",
     "typescript": "^5.8.3",
