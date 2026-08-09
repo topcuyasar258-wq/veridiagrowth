@@ -30,12 +30,12 @@ values
 insert into public.conversion_events
   (event_id, organization_id, site_id, session_id, event_type, occurred_at, received_at, risk_status, expires_at)
 values
-  ('evt_expired_accept01', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', now() - interval '100 days', now() - interval '100 days', 'accepted', now() - interval '10 days'),
-  ('evt_expired_accept02', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', now() - interval '100 days', now() - interval '100 days', 'accepted', now() - interval '9 days'),
-  ('evt_expired_suspect1', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', now() - interval '40 days', now() - interval '40 days', 'suspicious', now() - interval '5 days'),
-  ('evt_live_accepted001', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', now(), now(), 'accepted', now() + interval '90 days'),
-  ('evt_live_suspicious1', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', now(), now(), 'suspicious', now() + interval '30 days'),
-  ('evt_other_tenant0001', '10000000-0000-0000-0000-0000000000d2', '20000000-0000-0000-0000-0000000000d2', 'ses_ops000000000002', now(), now(), 'accepted', now() + interval '90 days');
+  ('evt_expired_accept01', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', 'session_started', now() - interval '100 days', now() - interval '100 days', 'accepted', now() - interval '10 days'),
+  ('evt_expired_accept02', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', 'session_started', now() - interval '100 days', now() - interval '100 days', 'accepted', now() - interval '9 days'),
+  ('evt_expired_suspect1', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', 'session_started', now() - interval '40 days', now() - interval '40 days', 'suspicious', now() - interval '5 days'),
+  ('evt_live_accepted001', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', 'session_started', now(), now(), 'accepted', now() + interval '90 days'),
+  ('evt_live_suspicious1', '10000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-0000000000d1', 'ses_ops000000000001', 'session_started', now(), now(), 'suspicious', now() + interval '30 days'),
+  ('evt_other_tenant0001', '10000000-0000-0000-0000-0000000000d2', '20000000-0000-0000-0000-0000000000d2', 'ses_ops000000000002', 'session_started', now(), now(), 'accepted', now() + interval '90 days');
 
 insert into public.quarantined_events
   (organization_id, site_id, event_id, event_type, risk_score, reason_code, occurred_at, received_at, expires_at)
@@ -157,6 +157,7 @@ select
   '10000000-0000-0000-0000-0000000000d1',
   '20000000-0000-0000-0000-0000000000d1',
   'ses_ops000000000001',
+  'session_started',
   now() - interval '30 minutes',
   now() - interval '30 minutes',
   'accepted',
@@ -171,6 +172,7 @@ select
   '10000000-0000-0000-0000-0000000000d1',
   '20000000-0000-0000-0000-0000000000d1',
   'ses_ops000000000001',
+  'session_started',
   now() - interval '1 minute',
   now() - interval '1 minute',
   'accepted',
@@ -225,7 +227,7 @@ select is(
 insert into public.conversion_events
   (event_id, organization_id, site_id, session_id, event_type, occurred_at, received_at, risk_status, expires_at)
 values
-  ('evt_tiny_sample00001', '10000000-0000-0000-0000-0000000000d2', '20000000-0000-0000-0000-0000000000d2', 'ses_ops000000000002', now() - interval '1 minute', now() - interval '1 minute', 'accepted', now() + interval '90 days');
+  ('evt_tiny_sample00001', '10000000-0000-0000-0000-0000000000d2', '20000000-0000-0000-0000-0000000000d2', 'ses_ops000000000002', 'session_started', now() - interval '1 minute', now() - interval '1 minute', 'accepted', now() + interval '90 days');
 
 select is(
   (

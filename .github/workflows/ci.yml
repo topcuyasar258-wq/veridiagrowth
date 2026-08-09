@@ -37,6 +37,9 @@ jobs:
       - name: Apply migrations and seed
         run: supabase db reset
 
+      - name: Check SQL fixture arity
+        run: npm run check:sql-arity
+
       - name: Run SQL pgTAP tests
         run: supabase db test
 
