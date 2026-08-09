@@ -459,6 +459,244 @@ async function cleanup(client: AdminClient) {
   )
 }
 
+/**
+ * Sends `count` requests in parallel and returns their statuses.
+ *
+ * Genuinely parallel: every request is started before any is awaited, which is
+ * the only way to exercise a race. Issuing them in a loop with `await` would
+ * serialise them and prove nothing.
+ */
+async function fireConcurrently(
+  env: LoadEnv,
+  bodies: string[],
+  origin: string,
+): Promise<{ statuses: number[]; networkErrors: number }> {
+  const statuses: number[] = []
+  let networkErrors = 0
+
+  const responses = await Promise.all(
+    bodies.map(async (body) => {
+      try {
+        const response = await fetch(`${env.appUrl}/api/v1/collect`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: origin,
+            "User-Agent": "veridia-load-harness/1.0",
+          },
+          body,
+        })
+        return response.status
+      } catch {
+        networkErrors += 1
+        return 0
+      }
+    }),
+  )
+
+  statuses.push(...responses)
+  return { statuses, networkErrors }
+}
+
+function eventBody(siteIndex: number, eventId: string, sessionId: string) {
+  return JSON.stringify({
+    schemaVersion: "2.0",
+    siteKey: siteKeyFor(siteIndex),
+    events: [
+      {
+        eventId,
+        eventType: "whatsapp_clicked",
+        sessionId,
+        occurredAt: new Date().toISOString(),
+        page: {
+          url: `https://${siteName(siteIndex)}.loadtest.invalid/iletisim`,
+          referrer: null,
+        },
+        trackerVersion: "0.1.0",
+      },
+    ],
+  })
+}
+
+/**
+ * Idempotency under concurrency.
+ *
+ * The same event id delivered by N simultaneous requests must yield exactly one
+ * stored interaction, and no request may fail with a 5xx. This is the test
+ * slice 2 could only verify at the RPC level; here it goes through the whole
+ * HTTP path.
+ */
+async function concurrencyDuplicate(
+  env: LoadEnv,
+  client: AdminClient,
+  concurrency: number,
+) {
+  const org = await requireFixtureOrg(client)
+  const siteIndex = 0
+  const eventId = `evt_${randomUUID()}`
+  const sessionId = `ses_${randomUUID()}`
+  const origin = `https://${siteName(siteIndex)}.loadtest.invalid`
+
+  const bodies = Array.from({ length: concurrency }, () =>
+    eventBody(siteIndex, eventId, sessionId),
+  )
+
+  const { statuses, networkErrors } = await fireConcurrently(
+    env,
+    bodies,
+    origin,
+  )
+
+  const { count: stored } = await client
+    .from("conversion_events")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", org.id)
+    .eq("event_id", eventId)
+
+  const serverErrors = statuses.filter((status) => status >= 500).length
+  const accepted = statuses.filter((status) => status === 202).length
+
+  const result = {
+    concurrency,
+    accepted,
+    serverErrors,
+    networkErrors,
+    storedRows: stored ?? 0,
+    pass: stored === 1 && serverErrors === 0 && networkErrors === 0,
+  }
+
+  console.log(JSON.stringify({ concurrentDuplicate: result }, null, 2))
+
+  if (!result.pass) {
+    console.error("CONCURRENCY_DUPLICATE_FAILED")
+    process.exitCode = 1
+  }
+}
+
+/**
+ * Quota counting under concurrency.
+ *
+ * With an atomic counter the stored window count must equal exactly the number
+ * of events submitted. A lost update -- the failure mode of read-then-write --
+ * shows up as a count lower than what was sent.
+ */
+async function concurrencyQuota(
+  env: LoadEnv,
+  client: AdminClient,
+  concurrency: number,
+) {
+  const org = await requireFixtureOrg(client)
+  // A dedicated site so an earlier command's traffic cannot skew the counter.
+  const siteIndex = 1
+  const origin = `https://${siteName(siteIndex)}.loadtest.invalid`
+
+  const { data: site } = await client
+    .from("sites")
+    .select("id")
+    .eq("organization_id", org.id)
+    .eq("name", siteName(siteIndex))
+    .maybeSingle()
+
+  if (!site) {
+    fail("quota fixture site missing; run seed first")
+  }
+
+  await client.from("event_quotas").delete().eq("site_id", site.id)
+
+  const bodies = Array.from({ length: concurrency }, () =>
+    eventBody(siteIndex, `evt_${randomUUID()}`, `ses_${randomUUID()}`),
+  )
+
+  const { statuses, networkErrors } = await fireConcurrently(
+    env,
+    bodies,
+    origin,
+  )
+
+  const { data: quotas } = await client
+    .from("event_quotas")
+    .select("scope, event_count")
+    .eq("site_id", site.id)
+    .eq("scope", "site")
+
+  const counted = (quotas ?? []).reduce(
+    (total, row) => total + (row.event_count ?? 0),
+    0,
+  )
+  const delivered = statuses.filter((status) => status === 202).length
+  const rateLimited = statuses.filter((status) => status === 429).length
+  const serverErrors = statuses.filter((status) => status >= 500).length
+
+  const result = {
+    concurrency,
+    delivered,
+    rateLimited,
+    serverErrors,
+    networkErrors,
+    quotaCounted: counted,
+    // Every request that reached the collector incremented the counter exactly
+    // once, whether or not the event was ultimately stored.
+    pass: counted === delivered + rateLimited && serverErrors === 0,
+  }
+
+  console.log(JSON.stringify({ concurrentQuota: result }, null, 2))
+
+  if (!result.pass) {
+    console.error("CONCURRENCY_QUOTA_FAILED")
+    process.exitCode = 1
+  }
+}
+
+/**
+ * Short burst at ten times the base concurrency.
+ *
+ * Deliberately short: the point is how quotas and risk behave when traffic
+ * spikes, not to hold the system under sustained load.
+ */
+async function burst(
+  env: LoadEnv,
+  options: { sites: number; concurrency: number },
+) {
+  const events = options.concurrency * 10
+  const result = await run(env, {
+    sites: options.sites,
+    events,
+    concurrency: options.concurrency * 10,
+  })
+
+  const errorRate =
+    result.requests > 0
+      ? (result.status5xx + result.networkErrors) / result.requests
+      : 0
+
+  console.log(
+    JSON.stringify(
+      { burst: { ...result, errorRate, withinErrorBudget: errorRate < 0.005 } },
+      null,
+      2,
+    ),
+  )
+
+  if (errorRate >= 0.005) {
+    console.error("BURST_ERROR_BUDGET_EXCEEDED")
+    process.exitCode = 1
+  }
+}
+
+async function requireFixtureOrg(client: AdminClient) {
+  const { data: org } = await client
+    .from("organizations")
+    .select("id")
+    .eq("slug", ORG_SLUG)
+    .maybeSingle()
+
+  if (!org) {
+    fail("no fixture organization; run seed first")
+  }
+
+  return org
+}
+
 async function main() {
   const env = readEnv()
   guard(env)
@@ -467,6 +705,12 @@ async function main() {
   const sites = Number(process.env.VERIDIA_LOAD_SITES ?? DEFAULT_SITES)
   const events = Number(process.env.VERIDIA_LOAD_EVENTS ?? DEFAULT_EVENTS)
   const concurrency = Number(process.env.VERIDIA_LOAD_CONCURRENCY ?? 20)
+  const duplicateConcurrency = Number(
+    process.env.VERIDIA_LOAD_DUPLICATE_CONCURRENCY ?? 20,
+  )
+  const quotaConcurrency = Number(
+    process.env.VERIDIA_LOAD_QUOTA_CONCURRENCY ?? 50,
+  )
 
   switch (command) {
     case "preflight":
@@ -480,6 +724,15 @@ async function main() {
       console.log(JSON.stringify(result, null, 2))
       return
     }
+    case "concurrency-duplicate":
+      await concurrencyDuplicate(env, client, duplicateConcurrency)
+      return
+    case "concurrency-quota":
+      await concurrencyQuota(env, client, quotaConcurrency)
+      return
+    case "burst":
+      await burst(env, { sites, concurrency })
+      return
     case "verify":
       await verify(client, null)
       return
@@ -488,7 +741,8 @@ async function main() {
       return
     default:
       console.log(
-        `Usage: tsx scripts/load/phase2a.ts <preflight|seed|run|verify|cleanup>\n\n` +
+        `Usage: tsx scripts/load/phase2a.ts ` +
+          `<preflight|seed|run|concurrency-duplicate|concurrency-quota|burst|verify|cleanup>\n\n` +
           `Requires a dedicated staging target. Defaults: ${DEFAULT_SITES} sites, ` +
           `${DEFAULT_EVENTS} events over ${DEFAULT_DURATION_MINUTES} minutes.`,
       )
