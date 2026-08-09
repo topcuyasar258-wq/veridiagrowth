@@ -55,6 +55,7 @@ async function load(page: Page, path = "/") {
   await page.waitForFunction(() => window.__veridiaTracker__ !== undefined, {
     timeout: 10_000,
   })
+  await waitForCaptures(1)
 }
 
 function bodies() {
@@ -69,9 +70,38 @@ function eventTypes() {
   )
 }
 
+/**
+ * Waits until the collector has recorded at least `expected` requests.
+ *
+ * Beacons are dispatched without being awaited, so the test has to wait for the
+ * server rather than the browser. Polling for the actual condition instead of
+ * sleeping a fixed interval keeps this from flaking on a slow CI runner, and
+ * keeps it fast on a quick one.
+ */
+async function waitForCaptures(expected: number, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs
+
+  while (server.captured.length < expected && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+}
+
+/**
+ * Waits for quiet: no new request for a short stretch.
+ *
+ * Used where the assertion is that nothing more arrives, which cannot be
+ * expressed as "wait for N requests".
+ */
 async function settle(page: Page) {
-  // Beacons are dispatched without awaiting; give the server a moment to record.
-  await page.waitForTimeout(300)
+  let previous = -1
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (server.captured.length === previous && attempt > 2) {
+      return
+    }
+    previous = server.captured.length
+    await page.waitForTimeout(25)
+  }
 }
 
 test.describe("happy path", () => {
@@ -89,6 +119,7 @@ test.describe("happy path", () => {
     server.captured.length = 0
 
     await page.click("#whatsapp")
+    await waitForCaptures(1)
     await settle(page)
 
     expect(eventTypes()).toEqual(["whatsapp_clicked"])
@@ -100,6 +131,7 @@ test.describe("happy path", () => {
     server.captured.length = 0
 
     await page.click("#phone")
+    await waitForCaptures(1)
     await settle(page)
 
     expect(eventTypes()).toEqual(["phone_clicked"])
@@ -113,6 +145,7 @@ test.describe("happy path", () => {
     await page.focus("#marked-email")
     await page.focus("#marked-phone")
     await page.focus("#marked-message")
+    await waitForCaptures(1)
     await settle(page)
 
     expect(eventTypes()).toEqual(["form_started"])
@@ -152,6 +185,7 @@ test.describe("happy path", () => {
     await page.click("#dyn-whatsapp")
     await page.click("#dyn-phone")
     await page.focus("#dyn-input")
+    await waitForCaptures(3)
     await settle(page)
 
     expect(eventTypes().sort()).toEqual([
@@ -172,6 +206,7 @@ test.describe("PII boundary on the wire", () => {
     await page.click("#phone")
     await page.focus("#marked-email")
     await page.focus("#marked-message")
+    await waitForCaptures(4)
     await settle(page)
 
     expect(server.captured.length).toBeGreaterThan(0)
