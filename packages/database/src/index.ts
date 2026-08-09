@@ -644,6 +644,237 @@ export interface Database {
           updated_at?: string
         }
       >
+
+      conversion_events: Table<
+        {
+          id: string
+          event_id: string
+          organization_id: string
+          site_id: string
+          session_id: string
+          event_type: string
+          page_host: string | null
+          page_path: string | null
+          referrer_host: string | null
+          source_category: string
+          utm_source: string | null
+          utm_medium: string | null
+          utm_campaign: string | null
+          utm_term: string | null
+          utm_content: string | null
+          tracker_version: string | null
+          integration_version: string | null
+          occurred_at: string
+          received_at: string
+          risk_status: string
+          expires_at: string
+          created_at: string
+        },
+        {
+          id?: string
+          event_id: string
+          organization_id: string
+          site_id: string
+          session_id: string
+          event_type: string
+          page_host?: string | null
+          page_path?: string | null
+          referrer_host?: string | null
+          source_category?: string
+          utm_source?: string | null
+          utm_medium?: string | null
+          utm_campaign?: string | null
+          utm_term?: string | null
+          utm_content?: string | null
+          tracker_version?: string | null
+          integration_version?: string | null
+          occurred_at: string
+          received_at?: string
+          risk_status?: string
+          expires_at?: string
+          created_at?: string
+        }
+      >
+      event_risk_assessments: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string
+          conversion_event_id: string | null
+          event_id: string
+          risk_score: number
+          risk_status: string
+          signal_codes: string[]
+          assessed_at: string
+          created_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id: string
+          conversion_event_id?: string | null
+          event_id: string
+          risk_score: number
+          risk_status: string
+          signal_codes?: string[]
+          assessed_at?: string
+          created_at?: string
+        }
+      >
+      quarantined_events: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string
+          event_id: string
+          event_type: string
+          session_id: string | null
+          risk_score: number
+          reason_code: string
+          occurred_at: string
+          received_at: string
+          quarantined_at: string
+          expires_at: string
+          created_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id: string
+          event_id: string
+          event_type: string
+          session_id?: string | null
+          risk_score: number
+          reason_code: string
+          occurred_at: string
+          received_at?: string
+          quarantined_at?: string
+          expires_at?: string
+          created_at?: string
+        }
+      >
+      event_quotas: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string
+          scope: string
+          scope_key: string
+          window_started_at: string
+          window_seconds: number
+          event_count: number
+          limit_value: number
+          updated_at: string
+          created_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id: string
+          scope: string
+          scope_key: string
+          window_started_at: string
+          window_seconds: number
+          event_count?: number
+          limit_value: number
+          updated_at?: string
+          created_at?: string
+        }
+      >
+      event_anomalies: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string
+          anomaly_type: string
+          severity: string
+          window_started_at: string
+          window_ended_at: string
+          observed_count: number
+          baseline_count: number | null
+          detected_at: string
+          created_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id: string
+          anomaly_type: string
+          severity: string
+          window_started_at: string
+          window_ended_at: string
+          observed_count: number
+          baseline_count?: number | null
+          detected_at?: string
+          created_at?: string
+        }
+      >
+      tracker_releases: Table<
+        {
+          id: string
+          version: string
+          status: string
+          notes_safe: string | null
+          created_at: string
+          released_at: string | null
+          updated_at: string
+        },
+        {
+          id?: string
+          version: string
+          status?: string
+          notes_safe?: string | null
+          created_at?: string
+          released_at?: string | null
+          updated_at?: string
+        }
+      >
+      site_tracker_deployments: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string
+          tracker_release_id: string | null
+          integration_version: string | null
+          pinned: boolean
+          last_seen_at: string | null
+          created_at: string
+          updated_at: string
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id: string
+          tracker_release_id?: string | null
+          integration_version?: string | null
+          pinned?: boolean
+          last_seen_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      >
+      site_tracker_keys: Table<
+        {
+          id: string
+          organization_id: string
+          site_id: string
+          public_key: string
+          status: string
+          created_at: string
+          rotated_at: string | null
+          revoked_at: string | null
+        },
+        {
+          id?: string
+          organization_id: string
+          site_id: string
+          public_key: string
+          status?: string
+          created_at?: string
+          rotated_at?: string | null
+          revoked_at?: string | null
+        }
+      >
     }
     Views: Record<string, never>
     Functions: {
@@ -781,6 +1012,55 @@ export interface Database {
           | "last_activity_at"
           | "created_at"
         > & { total_count: number })[]
+      }
+      consume_event_quota: {
+        Args: {
+          target_organization_id: string
+          target_site_id: string
+          quota_scope: string
+          quota_scope_key: string
+          quota_window_seconds: number
+          quota_limit: number
+          increment_by?: number
+        }
+        Returns: {
+          allowed: boolean
+          current_count: number
+          quota_limit_value: number
+        }[]
+      }
+      ingest_interaction_event: {
+        Args: {
+          target_site_id: string
+          in_event_id: string
+          in_event_type: string
+          in_session_id: string
+          in_occurred_at: string
+          in_page_host: string | null
+          in_page_path: string | null
+          in_referrer_host: string | null
+          in_source_category: string
+          in_utm_source: string | null
+          in_utm_medium: string | null
+          in_utm_campaign: string | null
+          in_utm_term: string | null
+          in_utm_content: string | null
+          in_tracker_version: string | null
+          in_integration_version: string | null
+          in_decision: string
+          in_risk_score: number
+          in_reason_codes: string[]
+        }
+        Returns: string
+      }
+      touch_site_tracker_deployment: {
+        Args: {
+          target_site_id: string
+          in_tracker_version: string | null
+          in_integration_version: string | null
+          throttle_seconds?: number
+        }
+        Returns: undefined
       }
     }
     Enums: Record<string, never>

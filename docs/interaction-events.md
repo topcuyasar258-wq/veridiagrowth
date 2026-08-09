@@ -135,6 +135,25 @@ Categories are the Phase 1 six: `organic`, `paid_search`, `paid_social`,
 `expires_at` is set by trigger on insert, so a row is never written without a
 retention deadline. The sweep job itself is Slice 4.
 
+## Collector
+
+The public endpoint that writes these tables is documented separately:
+
+- [interaction-collector.md](interaction-collector.md) — request/response
+  contract, site key, CORS, idempotency, IP handling
+- [interaction-risk-model.md](interaction-risk-model.md) — bands, weights,
+  calibration reasoning
+- [interaction-rate-limits.md](interaction-rate-limits.md) — scopes, graded
+  response, atomicity
+
+Two invariants worth repeating here, because they are what keep the terminology
+contract true in practice:
+
+- Tenancy is derived server side from the public site key. The request body
+  never carries an organization or site id.
+- `source_category` is derived server side. A client that could assert its own
+  category could relabel paid traffic as organic.
+
 ## Access
 
 Customers cannot read any table in this document. Every Phase 2 table has RLS

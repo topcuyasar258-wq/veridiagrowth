@@ -22,12 +22,14 @@ const NEEDLES = [
   "ip_risk_bundle_canary",
   "resend_bundle_canary",
   "worker_secret_bundle_canary",
+  "event_ip_risk_bundle_canary",
   "VERIDIA_CREDENTIAL_ENCRYPTION_KEYS",
   "SUPABASE_SERVICE_ROLE_KEY",
   "TURNSTILE_SECRET_KEY",
   "VERIDIA_IP_RISK_KEY",
   "RESEND_API_KEY",
   "VERIDIA_WORKER_SECRET",
+  "VERIDIA_EVENT_IP_RISK_KEY",
 ]
 
 /** Runtime secret values, when present, must not appear in the client bundle either. */
@@ -38,6 +40,7 @@ const RUNTIME_SECRET_ENV = [
   "VERIDIA_IP_RISK_KEY",
   "RESEND_API_KEY",
   "VERIDIA_WORKER_SECRET",
+  "VERIDIA_EVENT_IP_RISK_KEY",
 ]
 
 function unavailable(reason: string): never {

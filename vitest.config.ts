@@ -6,6 +6,12 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts", "packages/**/*.test.ts"],
+    env: {
+      // Synthetic, and never a real key. Set here so the suite exercises the
+      // collector's full four-scope quota path rather than the degraded
+      // three-scope path that applies when no IP key is configured.
+      VERIDIA_EVENT_IP_RISK_KEY: "test_event_ip_risk_key_0123456789",
+    },
     coverage: {
       provider: "v8",
       thresholds: {
