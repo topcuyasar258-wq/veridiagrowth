@@ -51,13 +51,28 @@ Creating the project is an account action; it cannot be automated from here.
 npm run load:phase2a preflight
 npm run load:phase2a seed
 npm run load:phase2a run
+npm run load:phase2a concurrency-duplicate
+npm run load:phase2a concurrency-quota
+npm run load:phase2a burst
 npm run load:phase2a verify
 npm run load:phase2a cleanup
 ```
 
-Defaults: 30 sites, 10,000 events, concurrency 20. Overridable through
-`VERIDIA_LOAD_SITES`, `VERIDIA_LOAD_EVENTS`, `VERIDIA_LOAD_CONCURRENCY`, up to
-the 100,000 ceiling.
+| Command                 | What it proves                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `run`                   | 30 sites, 10,000 events, latency and status distribution                                                |
+| `concurrency-duplicate` | 20 simultaneous requests carrying one event id yield exactly one stored interaction, with no 5xx        |
+| `concurrency-quota`     | 50 simultaneous requests increment the quota counter exactly 50 times — a lost update would count fewer |
+| `burst`                 | ten times the base concurrency for a short window                                                       |
+
+The concurrency commands start every request before awaiting any of them. A loop
+with `await` inside would serialise them and prove nothing about a race.
+
+Defaults: 30 sites, 10,000 events, concurrency 20, duplicate concurrency 20,
+quota concurrency 50. Overridable through `VERIDIA_LOAD_SITES`,
+`VERIDIA_LOAD_EVENTS`, `VERIDIA_LOAD_CONCURRENCY`,
+`VERIDIA_LOAD_DUPLICATE_CONCURRENCY`, `VERIDIA_LOAD_QUOTA_CONCURRENCY`, up to the
+100,000 ceiling.
 
 Event mix is 60% `session_started`, 20% `whatsapp_clicked`, 10%
 `phone_clicked`, 10% `form_started` — most visits start a session, fewer convert.
