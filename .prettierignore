@@ -1,2 +1,6 @@
 apps/dashboard/next-env.d.ts
 supabase/.temp
+
+# Checked-out copies of the repository. Formatting them checks whatever commit
+# each worktree happens to sit on, which is unrelated to the working tree.
+.claude/worktrees
