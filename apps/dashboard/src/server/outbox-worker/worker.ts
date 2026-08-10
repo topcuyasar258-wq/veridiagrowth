@@ -69,8 +69,13 @@ export async function runOutboxWorker(input: {
         replyTo: outboxWorkerConfig.emailReplyTo,
         timeoutMs: outboxWorkerConfig.emailProviderTimeoutMs,
       }),
+    // The placeholder survives only for tests and local development, where
+    // isOutboxWorkerProductionReady lets the worker run degraded. In production
+    // the route refuses before reaching here unless the real URL is configured.
     leadPanelBaseUrl:
-      input.context?.leadPanelBaseUrl ?? "https://app.veridia.local",
+      input.context?.leadPanelBaseUrl ??
+      outboxWorkerConfig.leadPanelBaseUrl ??
+      "https://app.veridia.local",
   }
   const summary: WorkerSummary = {
     claimed: events.length,
