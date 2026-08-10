@@ -21,6 +21,7 @@
     "typecheck": "npm run typecheck -ws --if-present",
     "tracker:build": "tsx scripts/tracker/build.ts",
     "load:phase2a": "tsx scripts/load/phase2a.ts",
+    "load:phase2a:typecheck": "tsc --noEmit -p scripts/load/tsconfig.json",
     "test:browser": "playwright test",
     "check:sql-arity": "tsx scripts/security/check-sql-fixture-arity.ts"
   },
