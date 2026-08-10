@@ -32,6 +32,39 @@ const DEFAULT_SITES = 30
 const DEFAULT_EVENTS = 10_000
 const DEFAULT_DURATION_MINUTES = 10
 
+/**
+ * Where `run` leaves its result for `verify` to read.
+ *
+ * The two are separate commands, so the only way `verify` can judge a run is if
+ * the run wrote its numbers down. Previously it was handed `null` and its error
+ * budget check therefore passed on an empty result every time.
+ */
+const RESULT_PATH = process.env.VERIDIA_LOAD_RESULT_PATH ?? ".load-phase2a.json"
+
+/** Collector 5xx and network failures, as a fraction of requests. */
+const ERROR_BUDGET = 0.005
+
+/**
+ * Collapse detector, not a performance target and not a user-facing SLA.
+ *
+ * The collector is a fire-and-forget beacon, so a slow response costs no visitor
+ * anything. What this catches is the collector falling off its throughput cliff,
+ * where latency climbs without a single 5xx to show for it -- the failure the
+ * error budget alone cannot see.
+ *
+ * The threshold is set from measurement, and deliberately wide. Back-to-back
+ * staging runs at the default concurrency of 20 produced p95 3.3s and 6.4s, so
+ * anything near 5s would flap on noise alone. Observed collapse is far away:
+ * p95 ~20s at concurrency 100 and ~34s at 200. 12s sits in the empty gap
+ * between the two, which is the only place a stable threshold can live.
+ *
+ * Re-measure before narrowing this. A tighter bound is only meaningful once the
+ * per-request round-trip count comes down and the spread with it.
+ */
+const LATENCY_P95_BUDGET_MS = Number(
+  process.env.VERIDIA_LOAD_P95_BUDGET_MS ?? 12_000,
+)
+
 /** PII sentinels placed in fixture pages; none may reach storage. */
 export const LOAD_SENTINELS = [
   "phase2-load-secret@example.com",
@@ -231,6 +264,12 @@ interface RunResult {
   latencyP95: number
   latencyP99: number
   durationMs: number
+  /**
+   * The number that reveals saturation. Latency alone cannot distinguish a
+   * server doing more work from one whose queue is simply growing; throughput
+   * flat across rising concurrency is the signature of the latter.
+   */
+  eventsPerSecond: number
 }
 
 function percentile(sorted: number[], p: number) {
@@ -274,6 +313,7 @@ async function run(
     latencyP95: 0,
     latencyP99: 0,
     durationMs: 0,
+    eventsPerSecond: 0,
   }
 
   let issued = 0
@@ -343,8 +383,44 @@ async function run(
   result.latencyP95 = percentile(latencies, 0.95)
   result.latencyP99 = percentile(latencies, 0.99)
   result.durationMs = Date.now() - startedAt
+  result.eventsPerSecond =
+    result.durationMs > 0
+      ? Number(((result.requests / result.durationMs) * 1000).toFixed(2))
+      : 0
 
   return result
+}
+
+function errorRateOf(result: RunResult): number {
+  if (result.requests === 0) return 0
+  return (result.status5xx + result.networkErrors) / result.requests
+}
+
+async function writeResult(result: RunResult) {
+  const { writeFile } = await import("node:fs/promises")
+  await writeFile(
+    RESULT_PATH,
+    JSON.stringify({ recordedAt: new Date().toISOString(), result }, null, 2),
+  )
+}
+
+/**
+ * Returns the last run's numbers, or null if no run has been recorded.
+ *
+ * A missing or unreadable file returns null rather than throwing, because the
+ * caller has to treat "no run to judge" as a failure to verify -- not as a
+ * verification that passed.
+ */
+async function readResult(): Promise<RunResult | null> {
+  try {
+    const { readFile } = await import("node:fs/promises")
+    const parsed = JSON.parse(await readFile(RESULT_PATH, "utf8")) as {
+      result?: RunResult
+    }
+    return parsed.result ?? null
+  } catch {
+    return null
+  }
 }
 
 async function verify(client: AdminClient, result: RunResult | null) {
@@ -378,10 +454,29 @@ async function verify(client: AdminClient, result: RunResult | null) {
   const serialized = JSON.stringify(sample ?? [])
   const leaked = LOAD_SENTINELS.filter((s) => serialized.includes(s))
 
-  const errorRate =
-    result && result.requests > 0
-      ? (result.status5xx + result.networkErrors) / result.requests
-      : 0
+  // No recorded run means the budgets have nothing to judge. Reporting 0% error
+  // and a pass here would be a verification that verified nothing.
+  if (!result) {
+    console.error(
+      JSON.stringify(
+        {
+          storedEvents: events ?? 0,
+          storedQuarantined: quarantined ?? 0,
+          piiSentinelsFound: leaked,
+          error: `no recorded run at ${RESULT_PATH}; run the "run" command first`,
+        },
+        null,
+        2,
+      ),
+    )
+    console.error("NO_RUN_TO_VERIFY")
+    process.exitCode = 1
+    return
+  }
+
+  const errorRate = errorRateOf(result)
+  const withinErrorBudget = errorRate < ERROR_BUDGET
+  const withinLatencyBudget = result.latencyP95 <= LATENCY_P95_BUDGET_MS
 
   console.log(
     JSON.stringify(
@@ -390,8 +485,11 @@ async function verify(client: AdminClient, result: RunResult | null) {
         storedQuarantined: quarantined ?? 0,
         piiSentinelsFound: leaked,
         errorRate,
-        errorBudget: 0.005,
-        withinErrorBudget: errorRate < 0.005,
+        errorBudget: ERROR_BUDGET,
+        withinErrorBudget,
+        latencyP95: result.latencyP95,
+        latencyP95Budget: LATENCY_P95_BUDGET_MS,
+        withinLatencyBudget,
         run: result,
       },
       null,
@@ -401,6 +499,16 @@ async function verify(client: AdminClient, result: RunResult | null) {
 
   if (leaked.length > 0) {
     console.error("PII_LEAK_DETECTED")
+    process.exitCode = 1
+  }
+
+  if (!withinErrorBudget) {
+    console.error("ERROR_BUDGET_EXCEEDED")
+    process.exitCode = 1
+  }
+
+  if (!withinLatencyBudget) {
+    console.error("LATENCY_BUDGET_EXCEEDED")
     process.exitCode = 1
   }
 }
@@ -664,20 +772,23 @@ async function burst(
     concurrency: options.concurrency * 10,
   })
 
-  const errorRate =
-    result.requests > 0
-      ? (result.status5xx + result.networkErrors) / result.requests
-      : 0
+  const errorRate = errorRateOf(result)
 
   console.log(
     JSON.stringify(
-      { burst: { ...result, errorRate, withinErrorBudget: errorRate < 0.005 } },
+      {
+        burst: {
+          ...result,
+          errorRate,
+          withinErrorBudget: errorRate < ERROR_BUDGET,
+        },
+      },
       null,
       2,
     ),
   )
 
-  if (errorRate >= 0.005) {
+  if (errorRate >= ERROR_BUDGET) {
     console.error("BURST_ERROR_BUDGET_EXCEEDED")
     process.exitCode = 1
   }
@@ -721,6 +832,7 @@ async function main() {
       return
     case "run": {
       const result = await run(env, { sites, events, concurrency })
+      await writeResult(result)
       console.log(JSON.stringify(result, null, 2))
       return
     }
@@ -734,7 +846,7 @@ async function main() {
       await burst(env, { sites, concurrency })
       return
     case "verify":
-      await verify(client, null)
+      await verify(client, await readResult())
       return
     case "cleanup":
       await cleanup(client)
