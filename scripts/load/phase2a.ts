@@ -46,6 +46,15 @@ interface LoadEnv {
   appUrl: string
   productionSupabaseUrl?: string
   productionAppUrl?: string
+  /**
+   * Vercel "Protection Bypass for Automation" secret.
+   *
+   * A preview deployment answers every unauthenticated request with 401 and an
+   * SSO redirect, so the harness cannot reach it at all. This header is Vercel's
+   * supported way through, and is preferable to switching protection off: the
+   * deployment stays closed to the public while automation gets in.
+   */
+  vercelBypassSecret?: string
 }
 
 function fail(message: string): never {
@@ -74,7 +83,28 @@ function readEnv(): LoadEnv {
     appUrl: (process.env.VERIDIA_LOAD_APP_URL ?? "").replace(/\/+$/, ""),
     productionSupabaseUrl: process.env.VERIDIA_PRODUCTION_SUPABASE_URL,
     productionAppUrl: process.env.VERIDIA_PRODUCTION_APP_URL,
+    vercelBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
   }
+}
+
+/** Headers every collector request carries, including the protection bypass. */
+function collectorHeaders(
+  env: LoadEnv,
+  origin: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Origin: origin,
+    "User-Agent": "veridia-load-harness/1.0",
+  }
+
+  if (env.vercelBypassSecret) {
+    headers["x-vercel-protection-bypass"] = env.vercelBypassSecret
+    // Without this the bypass sets a cookie and Vercel may still redirect.
+    headers["x-vercel-set-bypass-cookie"] = "false"
+  }
+
+  return headers
 }
 
 /**
@@ -136,7 +166,27 @@ async function preflight(env: LoadEnv, client: AdminClient) {
 
   const response = await fetch(`${env.appUrl}/api/v1/collect`, {
     method: "GET",
+    headers: env.vercelBypassSecret
+      ? {
+          "x-vercel-protection-bypass": env.vercelBypassSecret,
+          "x-vercel-set-bypass-cookie": "false",
+        }
+      : {},
+    redirect: "manual",
   })
+
+  // A protected preview deployment answers 401 or redirects to SSO. Every
+  // request would fail the same way, so this is caught here rather than
+  // surfacing as ten thousand mysterious errors during the run.
+  if (
+    response.status === 401 ||
+    (response.status >= 300 && response.status < 400)
+  ) {
+    fail(
+      "the deployment is protected: set VERCEL_AUTOMATION_BYPASS_SECRET, or " +
+        "disable Vercel Deployment Protection for this project",
+    )
+  }
 
   if (response.status !== 405) {
     fail(
@@ -305,11 +355,10 @@ async function run(
       try {
         const response = await fetch(`${env.appUrl}/api/v1/collect`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Origin: `https://${siteName(siteIndex)}.loadtest.invalid`,
-            "User-Agent": "veridia-load-harness/1.0",
-          },
+          headers: collectorHeaders(
+            env,
+            `https://${siteName(siteIndex)}.loadtest.invalid`,
+          ),
           body,
         })
 
@@ -479,11 +528,7 @@ async function fireConcurrently(
       try {
         const response = await fetch(`${env.appUrl}/api/v1/collect`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Origin: origin,
-            "User-Agent": "veridia-load-harness/1.0",
-          },
+          headers: collectorHeaders(env, origin),
           body,
         })
         return response.status
