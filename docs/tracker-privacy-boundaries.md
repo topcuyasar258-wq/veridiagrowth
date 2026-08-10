@@ -7,17 +7,74 @@ each boundary is drawn where it is.
 ## Never collected
 
 Names, email addresses, phone numbers, message bodies, any form field value,
-WhatsApp numbers, `tel:` targets, passwords, addresses, query-string parameters,
-raw IP, and any cross-site or advertising identifier.
+WhatsApp numbers, `tel:` targets, passwords, addresses, raw IP, and any
+cross-site identifier.
+
+Query-string parameters are dropped except the five UTM keys and the four
+advertising click ids named under [Marketing identity](#marketing-identity).
 
 ## No fingerprinting
 
 Explicitly not implemented, and not to be added without a policy decision:
-canvas, audio and font fingerprinting, device signatures, cross-site identifiers,
-persistent advertising-style profiles.
+canvas, audio and font fingerprinting, device signatures, cross-site
+identifiers.
+
+The distinction that matters is not persistent versus temporary, but whether
+the visitor can end it. A fingerprint is recomputed from the device, so it
+returns whether the visitor wants it to or not. Every identifier here is
+random, stored in the browser, and gone for good once cleared.
 
 A session id is random and short-lived. It cannot recognise the same person on
 another site, and it cannot survive its own expiry.
+
+## Marketing identity
+
+Two kinds of field can outlive a single visit. Both are governed by
+`marketingConsent`, a switch separate from `shouldTrack`, because counting
+anonymous interactions and building an advertising audience are different
+purposes. Omitting the callback means denied: a site that never sets it behaves
+exactly as it did before these fields existed.
+
+| Field                       | What it is                                      |
+| --------------------------- | ----------------------------------------------- |
+| `visitorId`                 | random per-site identity in browser storage     |
+| `gclid`, `gbraid`, `wbraid` | Google Ads click ids, read from the landing URL |
+| `fbclid`                    | Meta click id, read from the landing URL        |
+
+A click id identifies an ad click rather than a person, and only the platform
+that issued it can resolve it. It is still an advertising identifier, so it sits
+behind the same consent as the visitor id.
+
+### The visitor id is per site
+
+`localStorage` is origin-scoped, so a value written on one customer's site
+cannot be read on another's — a property of the browser, not a promise made by
+this code. The storage key also carries the site key, so two sites sharing one
+origin still hold separate identities.
+
+The consequence is deliberate: a Veridia-wide visitor graph cannot happen by
+accident. Building one would take a new mechanism, written on purpose. Nothing
+here grows into one on its own.
+
+### Consent is read per event, not at startup
+
+A visitor who accepts or withdraws consent mid-visit is honoured from that
+moment. Withdrawal is not a filter applied over stored data — it erases the
+visitor id and the click ids, so a later grant starts a new identity rather than
+resurrecting the old one. A consent callback that throws counts as a refusal.
+
+An identity is also withheld when browser storage cannot persist it, as in
+private mode. A value regenerated on every page load would look like a stream of
+one-visit strangers and would quietly corrupt any audience built from it.
+
+### Still refused
+
+- Marketing identity is stored on accepted events only. A quarantined event is
+  one the risk model did not trust, and suspected bot traffic must not enter an
+  audience.
+- No demographic inference. Age, gender and similar attributes cannot be derived
+  from click behaviour and are not guessed from it.
+- No cross-customer pooling, per the scope rule above.
 
 ## Page context
 

@@ -248,3 +248,83 @@ describe("isForbiddenKey", () => {
     expect(isForbiddenKey("utmSource")).toBe(false)
   })
 })
+
+describe("marketing identity fields", () => {
+  it("defaults both to absent when the tracker sends neither", () => {
+    const result = validateInteractionEvent(event(), { now: NOW })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.value.visitorId).toBeNull()
+    expect(result.value.clickIds).toEqual({
+      gclid: null,
+      gbraid: null,
+      wbraid: null,
+      fbclid: null,
+    })
+  })
+
+  it("accepts a well-formed visitor id and the four click ids", () => {
+    const result = validateInteractionEvent(
+      event({
+        visitorId: "vis_0123456789abcdef",
+        clickIds: { gclid: "a-1", gbraid: "b", wbraid: "c", fbclid: "d._~" },
+      }),
+      { now: NOW },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.value.visitorId).toBe("vis_0123456789abcdef")
+    expect(result.value.clickIds.gclid).toBe("a-1")
+  })
+
+  it("rejects a visitor id that is not in the bounded id format", () => {
+    for (const visitorId of ["short", "x".repeat(65), "has spaces in it!!"]) {
+      const result = validateInteractionEvent(event({ visitorId }), {
+        now: NOW,
+      })
+
+      expect(result.ok).toBe(false)
+      if (result.ok) continue
+      expect(result.rejection.reason).toBe("invalid_visitor_id")
+    }
+  })
+
+  // The bound is what stops the column becoming a payload channel.
+  it("rejects a click id that is over-long or carries structure", () => {
+    for (const gclid of ["x".repeat(513), "has space", "semi;colon", "a/b"]) {
+      const result = validateInteractionEvent(event({ clickIds: { gclid } }), {
+        now: NOW,
+      })
+
+      expect(result.ok).toBe(false)
+      if (result.ok) continue
+      expect(result.rejection.reason).toBe("invalid_click_id")
+    }
+  })
+
+  it("rejects an unknown key inside clickIds", () => {
+    const result = validateInteractionEvent(
+      event({ clickIds: { gclid: "a", ttclid: "b" } }),
+      { now: NOW },
+    )
+
+    expect(result.ok).toBe(false)
+  })
+
+  it("treats an empty click id as absent rather than invalid", () => {
+    const result = validateInteractionEvent(
+      event({ clickIds: { gclid: "", fbclid: "d" } }),
+      { now: NOW },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.value.clickIds.gclid).toBeNull()
+    expect(result.value.clickIds.fbclid).toBe("d")
+  })
+})

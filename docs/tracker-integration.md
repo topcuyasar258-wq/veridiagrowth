@@ -130,10 +130,35 @@ methods. Intended for tests and for SPA teardown.
 
 ## Consent
 
-`shouldTrack()` is the integration point. Whether tracking is lawful without
-consent is a decision for the site operator and their counsel, so no cookie
-banner behaviour and no Do Not Track policy is hardcoded here. Return `false` and
-the tracker stays inert — no listeners, no storage, no requests.
+There are two switches, because analytics and advertising are different purposes
+and most consent regimes treat them separately.
+
+`shouldTrack()` governs the tracker as a whole. Whether tracking is lawful
+without consent is a decision for the site operator and their counsel, so no
+cookie banner behaviour and no Do Not Track policy is hardcoded here. Return
+`false` and the tracker stays inert — no listeners, no storage, no requests.
+
+`marketingConsent()` governs the persistent visitor id and the advertising click
+ids (`gclid`, `gbraid`, `wbraid`, `fbclid`), and nothing else. Omit it and those
+fields are never collected, which is exactly how the tracker behaved before they
+existed.
+
+```ts
+VeridiaTracker.init({
+  siteKey: "vtk_...",
+  collectorUrl: "https://collector.example.com/api/v1/collect",
+  shouldTrack: () => consent.analytics,
+  marketingConsent: () => consent.marketing,
+})
+```
+
+Both are read fresh every time they matter, so a banner that resolves after page
+load is honoured without a reload. Withdrawing marketing consent also erases the
+visitor id and click ids already stored, so granting it again starts a new
+identity. A callback that throws counts as a refusal.
+
+See [tracker-privacy-boundaries.md](tracker-privacy-boundaries.md) for what each
+field is, and why the visitor id cannot span two sites.
 
 ## Browser support
 

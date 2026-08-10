@@ -4,7 +4,13 @@ import {
   type AttributionTouch,
 } from "@veridia/shared"
 
-import { readUtm, safeReferrer, type UtmValues } from "./sanitize"
+import {
+  readClickIds,
+  readUtm,
+  safeReferrer,
+  type ClickIdValues,
+  type UtmValues,
+} from "./sanitize"
 import { readJson, writeJson, type TrackerStorage } from "./storage"
 
 /**
@@ -23,6 +29,11 @@ export const ATTRIBUTION_STORAGE_KEY = "veridia.attribution.v1"
 
 export interface StoredAttribution extends AttributionState {
   expiresAt: number
+  /**
+   * Advertising click ids, stored alongside attribution so they share its
+   * expiry. Only ever written under marketing consent, and absent otherwise.
+   */
+  clickIds?: ClickIdValues
 }
 
 export interface AttributionManagerOptions {
@@ -50,12 +61,24 @@ export class AttributionManager {
    * Called once per page load and again on SPA navigation, so a campaign click
    * mid-session is recorded even without a full page load.
    */
-  observe(href: string, referrer: string): StoredAttribution {
+  observe(
+    href: string,
+    referrer: string,
+    options: { captureClickIds?: boolean } = {},
+  ): StoredAttribution {
     const now = this.now()
     const stored = this.read(now)
 
     const utm = readUtm(href)
     const referrerOrigin = referrer ? safeReferrer(referrer) : null
+
+    // Last touch wins, matching the UTM rule: a visitor who arrives again on a
+    // new ad click should be attributed to that click, not the first one. A
+    // page load carrying no click id leaves the stored one alone -- otherwise
+    // navigating to a second page would erase the ad click that brought them.
+    const clickIds = options.captureClickIds
+      ? { ...(stored.clickIds ?? {}), ...readClickIds(href) }
+      : stored.clickIds
 
     // A page load with neither UTM nor referrer is a direct touch, which by
     // contract cannot overwrite an existing non-direct source.
@@ -73,10 +96,38 @@ export class AttributionManager {
     const next: StoredAttribution = {
       ...merged,
       expiresAt: now + this.windowMs,
+      ...(clickIds && Object.keys(clickIds).length > 0 ? { clickIds } : {}),
     }
 
     writeJson(this.storage, ATTRIBUTION_STORAGE_KEY, next)
     return next
+  }
+
+  /** The click ids to attach to an outgoing event, empty when none are stored. */
+  currentClickIds(): ClickIdValues {
+    return this.read(this.now()).clickIds ?? {}
+  }
+
+  /**
+   * Drops stored click ids while keeping ordinary attribution.
+   *
+   * Called when marketing consent is withdrawn: the campaign labels a site
+   * operator chose stay, the advertising identifiers do not.
+   */
+  clearClickIds(): void {
+    const state = this.read(this.now())
+
+    if (!state.clickIds) {
+      return
+    }
+
+    const next: StoredAttribution = {
+      firstTouch: state.firstTouch,
+      lastTouch: state.lastTouch,
+      expiresAt: state.expiresAt,
+    }
+
+    writeJson(this.storage, ATTRIBUTION_STORAGE_KEY, next)
   }
 
   /** The UTM values to attach to an outgoing event: last touch wins. */

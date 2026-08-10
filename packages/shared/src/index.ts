@@ -38,6 +38,7 @@ export {
 
 export {
   ALLOWED_ATTRIBUTION_KEYS,
+  ALLOWED_CLICK_ID_KEYS,
   ALLOWED_EVENT_KEYS,
   ALLOWED_PAGE_KEYS,
   FORBIDDEN_KEYS,
@@ -45,6 +46,7 @@ export {
   checkPrimitiveLeaves,
   isForbiddenKey,
   type AllowedEventKey,
+  type ClickIdKey,
   type PiiViolation,
 } from "./events/pii"
 

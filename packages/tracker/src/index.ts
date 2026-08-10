@@ -24,6 +24,7 @@ import { safePageUrl, safeReferrer } from "./sanitize"
 import { randomId, SessionManager } from "./session"
 import { createStorage, type TrackerStorage } from "./storage"
 import { Transport } from "./transport"
+import { VisitorManager } from "./visitor"
 
 export const TRACKER_SCHEMA_VERSION = "2.0"
 
@@ -33,7 +34,7 @@ export interface TrackerConfig {
   trackerVersion?: string
   integrationVersion?: string
   /**
-   * Consent integration point.
+   * Analytics consent integration point.
    *
    * Deliberately not a hardcoded cookie-banner or DNT policy: whether tracking
    * is lawful without consent is a legal decision for the site operator, not
@@ -41,6 +42,24 @@ export interface TrackerConfig {
    * to keep the tracker inert.
    */
   shouldTrack?: () => boolean
+
+  /**
+   * Marketing consent integration point, separate from `shouldTrack`.
+   *
+   * Counting anonymous interactions and building an advertising audience are
+   * different purposes and, in most consent regimes, need separate permission.
+   * Folding them into one switch would mean a visitor who agreed to analytics
+   * had silently agreed to be retargeted.
+   *
+   * Governs the persistent visitor id and the advertising click ids, and
+   * nothing else. Omitted means denied -- consent is never assumed, and a site
+   * that never calls this behaves exactly as it did before the field existed.
+   *
+   * Read before every event rather than once at startup, so accepting or
+   * withdrawing consent mid-visit takes effect immediately. Withdrawing also
+   * erases what was already stored.
+   */
+  marketingConsent?: () => boolean
   enabled?: boolean
   /** Development only. Production is silent. */
   debug?: boolean
@@ -71,6 +90,7 @@ export class VeridiaTracker implements TrackerInstance {
   private readonly storage: TrackerStorage
   private readonly session: SessionManager
   private readonly attribution: AttributionManager
+  private readonly visitor: VisitorManager
   private readonly transport: Transport
   private readonly now: () => number
 
@@ -108,6 +128,10 @@ export class VeridiaTracker implements TrackerInstance {
     this.attribution = new AttributionManager({
       storage: this.storage,
       now: this.now,
+    })
+    this.visitor = new VisitorManager({
+      storage: this.storage,
+      siteKey: config.siteKey,
     })
     this.transport = new Transport({
       collectorUrl: config.collectorUrl,
@@ -154,13 +178,48 @@ export class VeridiaTracker implements TrackerInstance {
     }
   }
 
+  /**
+   * Marketing consent, re-read on every use.
+   *
+   * A visitor who accepts or withdraws consent mid-visit must be honoured from
+   * that moment, not from the next page load. Any exception is treated as a
+   * refusal: a consent callback that throws has not said yes.
+   */
+  private hasMarketingConsent(): boolean {
+    try {
+      return this.config.marketingConsent?.() === true
+    } catch (error) {
+      logDebug(this.config, error)
+      return false
+    }
+  }
+
+  /** Erases marketing identifiers the moment consent stops being given. */
+  private enforceMarketingConsent(consented: boolean): void {
+    if (consented) {
+      return
+    }
+
+    try {
+      this.visitor.clear()
+      this.attribution.clearClickIds()
+    } catch (error) {
+      logDebug(this.config, error)
+    }
+  }
+
   private start(): void {
     this.capturePageContext(
       typeof document !== "undefined" ? document.referrer : "",
     )
+
+    const consented = this.hasMarketingConsent()
+    this.enforceMarketingConsent(consented)
+
     this.attribution.observe(
       typeof location !== "undefined" ? location.href : "",
       typeof document !== "undefined" ? document.referrer : "",
+      { captureClickIds: consented },
     )
 
     this.emitSessionStarted()
@@ -271,7 +330,12 @@ export class VeridiaTracker implements TrackerInstance {
         // Referrer is not re-read: within an SPA the document referrer still
         // describes how the visitor arrived at the site.
         this.capturePageContext(null)
-        this.attribution.observe(location.href, "")
+
+        const consented = this.hasMarketingConsent()
+        this.enforceMarketingConsent(consented)
+        this.attribution.observe(location.href, "", {
+          captureClickIds: consented,
+        })
       } catch (error) {
         logDebug(this.config, error)
       }
@@ -336,6 +400,15 @@ export class VeridiaTracker implements TrackerInstance {
     const session = this.session.current()
     const utm = this.attribution.currentUtm()
 
+    // Re-read per event, so consent withdrawn between two clicks stops the
+    // second one. Withdrawal also erases what was stored, so a later grant
+    // starts a new identity rather than resurrecting the old one.
+    const consented = this.hasMarketingConsent()
+    this.enforceMarketingConsent(consented)
+
+    const visitorId = consented ? this.visitor.ensure() : null
+    const clickIds = consented ? this.attribution.currentClickIds() : {}
+
     return {
       schemaVersion: TRACKER_SCHEMA_VERSION,
       siteKey: this.config.siteKey,
@@ -357,6 +430,13 @@ export class VeridiaTracker implements TrackerInstance {
             utmCampaign: utm.utm_campaign ?? null,
             utmTerm: utm.utm_term ?? null,
             utmContent: utm.utm_content ?? null,
+          },
+          visitorId,
+          clickIds: {
+            gclid: clickIds.gclid ?? null,
+            gbraid: clickIds.gbraid ?? null,
+            wbraid: clickIds.wbraid ?? null,
+            fbclid: clickIds.fbclid ?? null,
           },
           trackerVersion: this.config.trackerVersion ?? null,
           integrationVersion: this.config.integrationVersion ?? null,

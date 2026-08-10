@@ -14,10 +14,12 @@
 
 import {
   ALLOWED_ATTRIBUTION_KEYS,
+  ALLOWED_CLICK_ID_KEYS,
   ALLOWED_EVENT_KEYS,
   ALLOWED_PAGE_KEYS,
   checkAllowedKeys,
   checkPrimitiveLeaves,
+  type ClickIdKey,
   type PiiViolation,
 } from "./pii"
 import {
@@ -60,6 +62,16 @@ export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000
 /** Events older than this are not worth accepting from a stale tab. */
 export const MAX_EVENT_AGE_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Click ids are issued by the ad platforms, so their length and alphabet are
+ * not ours to choose. Bounded generously and checked for shape only: rejecting
+ * a valid `gclid` because the platform lengthened it would lose the very
+ * attribution the field exists to carry, while leaving it unbounded turns it
+ * into a payload smuggling route.
+ */
+export const MAX_CLICK_ID_LENGTH = 512
+
+const CLICK_ID_PATTERN = /^[A-Za-z0-9._~-]{1,512}$/
 const ID_PATTERN = /^[A-Za-z0-9_-]{16,64}$/
 const VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/
 
@@ -72,6 +84,12 @@ export interface NormalizedInteractionEvent {
   pagePath: string | null
   referrerHost: string | null
   utm: Record<UtmKey, string | null>
+  /**
+   * Present only under marketing consent, and only ever scoped to one site --
+   * see docs/tracker-privacy-boundaries.md. Absent is the normal case.
+   */
+  visitorId: string | null
+  clickIds: Record<ClickIdKey, string | null>
   trackerVersion: string | null
   integrationVersion: string | null
 }
@@ -87,6 +105,8 @@ export type RejectionReason =
   | "missing_field"
   | "invalid_event_id"
   | "invalid_session_id"
+  | "invalid_visitor_id"
+  | "invalid_click_id"
   | "invalid_event_type"
   | "backend_only_event_type"
   | "invalid_occurred_at"
@@ -275,6 +295,65 @@ export function validateInteractionEvent(
     }
   }
 
+  // Absent is the normal case: a visitor who has not given marketing consent
+  // sends no identifier at all, rather than an empty or placeholder one.
+  let visitorId: string | null = null
+
+  if (input.visitorId !== undefined && input.visitorId !== null) {
+    if (
+      typeof input.visitorId !== "string" ||
+      !ID_PATTERN.test(input.visitorId)
+    ) {
+      return reject("invalid_visitor_id", `${path}.visitorId`)
+    }
+
+    visitorId = input.visitorId
+  }
+
+  const clickIds = emptyClickIds()
+  const rawClickIds = input.clickIds
+
+  if (rawClickIds !== undefined && rawClickIds !== null) {
+    if (!isPlainObject(rawClickIds)) {
+      return reject("non_primitive_field", `${path}.clickIds`)
+    }
+
+    const clickIdViolations = [
+      ...checkAllowedKeys(
+        rawClickIds,
+        ALLOWED_CLICK_ID_KEYS,
+        `${path}.clickIds`,
+      ),
+      ...checkPrimitiveLeaves(
+        rawClickIds,
+        [...ALLOWED_CLICK_ID_KEYS],
+        `${path}.clickIds`,
+      ),
+    ]
+
+    if (clickIdViolations.length > 0) {
+      return reject(
+        reasonFor(clickIdViolations),
+        `${path}.clickIds`,
+        clickIdViolations,
+      )
+    }
+
+    for (const key of ALLOWED_CLICK_ID_KEYS) {
+      const raw = rawClickIds[key]
+
+      if (raw === undefined || raw === null || raw === "") {
+        continue
+      }
+
+      if (typeof raw !== "string" || !CLICK_ID_PATTERN.test(raw)) {
+        return reject("invalid_click_id", `${path}.clickIds.${key}`)
+      }
+
+      clickIds[key] = raw
+    }
+  }
+
   return {
     ok: true,
     value: {
@@ -286,10 +365,16 @@ export function validateInteractionEvent(
       pagePath,
       referrerHost,
       utm,
+      visitorId,
+      clickIds,
       trackerVersion,
       integrationVersion,
     },
   }
+}
+
+function emptyClickIds(): Record<ClickIdKey, string | null> {
+  return { gclid: null, gbraid: null, wbraid: null, fbclid: null }
 }
 
 export interface ValidatedBatch {

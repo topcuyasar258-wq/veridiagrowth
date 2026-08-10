@@ -19,6 +19,8 @@ export const ALLOWED_EVENT_KEYS = [
   "occurredAt",
   "page",
   "attribution",
+  "visitorId",
+  "clickIds",
   "trackerVersion",
   "integrationVersion",
 ] as const
@@ -32,6 +34,29 @@ export const ALLOWED_ATTRIBUTION_KEYS = [
   "utmTerm",
   "utmContent",
 ] as const
+
+/**
+ * Advertising click identifiers.
+ *
+ * These are the only query-string parameters besides UTM that survive, and they
+ * are the reason remarketing can work at all: an ad platform recognises its own
+ * click id, and nothing in this system can reconstruct one.
+ *
+ * `gbraid` and `wbraid` are Google's replacements for `gclid` on traffic where
+ * `gclid` is unavailable. Accepting only `gclid` would silently lose the
+ * campaigns that use them.
+ *
+ * They identify an ad click, not a person, but they are still an advertising
+ * identifier: the tracker sends them only under marketing consent.
+ */
+export const ALLOWED_CLICK_ID_KEYS = [
+  "gclid",
+  "gbraid",
+  "wbraid",
+  "fbclid",
+] as const
+
+export type ClickIdKey = (typeof ALLOWED_CLICK_ID_KEYS)[number]
 
 export type AllowedEventKey = (typeof ALLOWED_EVENT_KEYS)[number]
 

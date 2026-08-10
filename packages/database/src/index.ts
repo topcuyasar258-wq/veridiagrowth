@@ -669,6 +669,11 @@ export interface Database {
           risk_status: string
           expires_at: string
           created_at: string
+          visitor_id: string | null
+          gclid: string | null
+          gbraid: string | null
+          wbraid: string | null
+          fbclid: string | null
         },
         {
           id?: string
@@ -693,6 +698,11 @@ export interface Database {
           risk_status?: string
           expires_at?: string
           created_at?: string
+          visitor_id?: string | null
+          gclid?: string | null
+          gbraid?: string | null
+          wbraid?: string | null
+          fbclid?: string | null
         }
       >
       event_risk_assessments: Table<
@@ -1056,6 +1066,11 @@ export interface Database {
           in_decision: string
           in_risk_score: number
           in_reason_codes: string[]
+          in_visitor_id?: string | null
+          in_gclid?: string | null
+          in_gbraid?: string | null
+          in_wbraid?: string | null
+          in_fbclid?: string | null
         }
         Returns: string
       }

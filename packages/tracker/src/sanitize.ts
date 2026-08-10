@@ -18,9 +18,23 @@ const UTM_KEYS = [
 export type UtmKey = (typeof UTM_KEYS)[number]
 export type UtmValues = Partial<Record<UtmKey, string>>
 
+/**
+ * Advertising click identifiers, the only non-UTM query parameters read here.
+ *
+ * `gbraid` and `wbraid` are Google's stand-ins for `gclid` on traffic where
+ * `gclid` is not available; reading only `gclid` would silently drop those
+ * campaigns.
+ */
+const CLICK_ID_KEYS = ["gclid", "gbraid", "wbraid", "fbclid"] as const
+
+export type ClickIdKey = (typeof CLICK_ID_KEYS)[number]
+export type ClickIdValues = Partial<Record<ClickIdKey, string>>
+
 const MAX_HOST = 253
 const MAX_PATH = 512
 const MAX_UTM = 128
+/** Set by the ad platforms, so bounded generously rather than tightly. */
+const MAX_CLICK_ID = 512
 
 function truncate(value: string, max: number) {
   return value.length > max ? value.slice(0, max) : value
@@ -82,6 +96,33 @@ export function readUtm(href: string): UtmValues {
     }
   } catch {
     // A page URL that will not parse yields no attribution rather than an error.
+  }
+
+  return result
+}
+
+/**
+ * Reads only the advertising click identifiers.
+ *
+ * Kept separate from `readUtm` because the two have different lawful bases: UTM
+ * values are campaign labels the site operator chose, while a click id is an
+ * advertising identifier and is only ever read under marketing consent. Calling
+ * this function is therefore a decision the caller makes explicitly.
+ */
+export function readClickIds(href: string): ClickIdValues {
+  const result: ClickIdValues = {}
+
+  try {
+    const params = new URL(href).searchParams
+
+    for (const key of CLICK_ID_KEYS) {
+      const raw = params.get(key)?.trim()
+      if (raw) {
+        result[key] = truncate(raw, MAX_CLICK_ID)
+      }
+    }
+  } catch {
+    // An unparseable URL yields no click ids rather than an error.
   }
 
   return result

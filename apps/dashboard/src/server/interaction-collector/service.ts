@@ -248,6 +248,13 @@ async function storeEvent(input: {
     in_decision: risk.decision,
     in_risk_score: risk.score,
     in_reason_codes: risk.reasonCodes,
+    // Present only when the tracker had marketing consent. The RPC stores them
+    // on accepted events only; a quarantined event never enters an audience.
+    in_visitor_id: event.visitorId,
+    in_gclid: event.clickIds.gclid,
+    in_gbraid: event.clickIds.gbraid,
+    in_wbraid: event.clickIds.wbraid,
+    in_fbclid: event.clickIds.fbclid,
   })
 
   if (error) {
