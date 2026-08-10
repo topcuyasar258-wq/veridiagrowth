@@ -213,9 +213,7 @@ async function seed(client: AdminClient, siteCount: number) {
     .from("organizations")
     .upsert(
       { name: "Load Test Synthetic", slug: ORG_SLUG, status: "active" },
-      {
-        onConflict: "slug",
-      },
+      { onConflict: "slug" },
     )
     .select("id")
     .single()
@@ -225,44 +223,103 @@ async function seed(client: AdminClient, siteCount: number) {
   }
 
   let created = 0
+  let reused = 0
 
   for (let index = 0; index < siteCount; index += 1) {
-    const { data: site } = await client
+    // public.sites has no unique constraint on (organization_id, name), so an
+    // upsert cannot be used here. Look the row up, then insert only if absent;
+    // that keeps the command repeatable without inventing a constraint the
+    // production schema does not have.
+    const { data: existing, error: lookupError } = await client
       .from("sites")
-      .upsert(
-        { organization_id: org.id, name: siteName(index), status: "active" },
-        { onConflict: "organization_id,name" },
-      )
       .select("id")
-      .single()
+      .eq("organization_id", org.id)
+      .eq("name", siteName(index))
+      .maybeSingle()
 
-    if (!site) continue
+    if (lookupError) {
+      fail(`site lookup failed for ${siteName(index)}: ${lookupError.message}`)
+    }
 
-    await client.from("site_domains").upsert(
-      {
-        site_id: site.id,
-        domain: `${siteName(index)}.loadtest.invalid`,
-        normalized_domain: `${siteName(index)}.loadtest.invalid`,
+    let siteId = existing?.id
+
+    if (!siteId) {
+      const { data: inserted, error: insertError } = await client
+        .from("sites")
+        .insert({
+          organization_id: org.id,
+          name: siteName(index),
+          status: "active",
+        })
+        .select("id")
+        .single()
+
+      // A seed that silently creates nothing and reports success is worse than
+      // one that stops: the failure would only surface as an unexplained empty
+      // load run.
+      if (insertError || !inserted) {
+        fail(
+          `site insert failed for ${siteName(index)}: ${insertError?.message}`,
+        )
+      }
+
+      siteId = inserted.id
+      created += 1
+    } else {
+      reused += 1
+    }
+
+    const domain = `${siteName(index)}.loadtest.invalid`
+    const { data: existingDomain } = await client
+      .from("site_domains")
+      .select("id")
+      .eq("site_id", siteId)
+      .eq("normalized_domain", domain)
+      .maybeSingle()
+
+    if (!existingDomain) {
+      const { error: domainError } = await client.from("site_domains").insert({
+        site_id: siteId,
+        domain,
+        normalized_domain: domain,
         is_primary: true,
-      },
-      { onConflict: "site_id,normalized_domain" },
-    )
+      })
 
-    await client.from("site_tracker_keys").upsert(
-      {
-        organization_id: org.id,
-        site_id: site.id,
-        public_key: siteKeyFor(index),
-        status: "active",
-      },
-      { onConflict: "public_key" },
-    )
+      if (domainError) {
+        fail(`domain insert failed for ${domain}: ${domainError.message}`)
+      }
+    }
 
-    created += 1
+    const { data: existingKey } = await client
+      .from("site_tracker_keys")
+      .select("id")
+      .eq("public_key", siteKeyFor(index))
+      .maybeSingle()
+
+    if (!existingKey) {
+      const { error: keyError } = await client
+        .from("site_tracker_keys")
+        .insert({
+          organization_id: org.id,
+          site_id: siteId,
+          public_key: siteKeyFor(index),
+          status: "active",
+        })
+
+      if (keyError) {
+        fail(`tracker key insert failed for site ${index}: ${keyError.message}`)
+      }
+    }
+  }
+
+  const total = created + reused
+
+  if (total !== siteCount) {
+    fail(`expected ${siteCount} fixture sites, ended with ${total}`)
   }
 
   console.log(
-    JSON.stringify({ organization: ORG_SLUG, sites: created }, null, 2),
+    JSON.stringify({ organization: ORG_SLUG, created, reused, total }, null, 2),
   )
 }
 
