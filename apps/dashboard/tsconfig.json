@@ -25,5 +25,10 @@
     "src/**/*.tsx",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "**/* 2.ts", "**/* 2.tsx", "**/* 2.d.ts"]
+  "exclude": [
+    "node_modules",
+    "**/* [0-9].ts",
+    "**/* [0-9].tsx",
+    "**/* [0-9][0-9].ts"
+  ]
 }
