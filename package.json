@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w apps/dashboard",
+    "build": "npm run tracker:build && npm run build -w apps/dashboard",
     "acceptance:phase1": "tsx scripts/acceptance/phase1.ts",
     "acceptance:phase1:typecheck": "tsc --noEmit -p scripts/acceptance/tsconfig.json",
     "dev": "npm run dev -w apps/dashboard",

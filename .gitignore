@@ -11,6 +11,9 @@ supabase/.temp
 apps/*/AGENTS.md
 apps/*/CLAUDE.md
 packages/tracker/dist
+# Published by tracker:build, regenerated on every deploy. A built bundle in
+# version control drifts from its source the moment a rebuild is forgotten.
+apps/dashboard/public/t
 test-results
 playwright-report
 .playwright

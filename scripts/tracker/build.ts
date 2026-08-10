@@ -7,12 +7,25 @@
  * visitors download gets slower one dependency at a time.
  */
 import { gzipSync } from "node:zlib"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { build } from "esbuild"
 
 const OUT_DIR = "packages/tracker/dist"
+
+/**
+ * Where the built artifacts are served from.
+ *
+ * The loader resolves `tracker-v{version}.js` relative to its own `src`, so the
+ * two files have to be siblings. Publishing them into the dashboard's static
+ * directory puts them behind the same CDN and the same origin as the collector,
+ * which costs nothing extra and removes a cross-origin hop.
+ *
+ * Generated at build time and gitignored: a built bundle in version control
+ * drifts from its source the moment someone forgets to rebuild.
+ */
+const PUBLISH_DIR = "apps/dashboard/public/t"
 const TRACKER_VERSION = "0.1.0"
 
 /** Gzip because that is what the browser actually downloads. */
@@ -108,7 +121,18 @@ async function main() {
     process.exit(1)
   }
 
+  // Published only once the budgets pass, so an over-budget bundle can never
+  // become the one customer sites load.
+  mkdirSync(PUBLISH_DIR, { recursive: true })
+
+  for (const name of [`tracker-v${TRACKER_VERSION}.js`, "loader.js"]) {
+    copyFileSync(join(OUT_DIR, name), join(PUBLISH_DIR, name))
+  }
+
   console.log("bundle budgets ok")
+  console.log(
+    `published to ${PUBLISH_DIR}/ (loader.js, tracker-v${TRACKER_VERSION}.js)`,
+  )
 }
 
 void main().catch((error: unknown) => {

@@ -7,13 +7,35 @@ One tag, before `</body>` or in `<head>`:
 ```html
 <script
   async
-  src="https://cdn.example.com/loader.js"
+  src="https://veridiagrowth-growth.vercel.app/t/loader.js"
   data-veridia-site="vtk_..."
 ></script>
 ```
 
 `async` is required. The loader never blocks parsing, never calls
 `document.write` and never issues a synchronous request.
+
+## Where the files are served from
+
+`npm run tracker:build` publishes both artifacts into
+`apps/dashboard/public/t/`, so they ship with the application and sit behind the
+same origin as the collector — which is also why `data-veridia-collector` can
+default to the loader's own origin. The root `build` script runs it first, which
+is what puts them on a deployment.
+
+| File            | Cache             | Why                                                              |
+| --------------- | ----------------- | ---------------------------------------------------------------- |
+| `loader.js`     | 5 minutes         | the indirection a rollback travels through                       |
+| `tracker-v*.js` | 1 year, immutable | the version is in the filename, so the contents can never change |
+
+The loader resolves `tracker-v{version}.js` **relative to its own `src`**, so
+the two files must stay siblings. Serving the loader from one host and the
+versioned bundle from another silently breaks version pinning.
+
+The five-minute loader cache is not a tuning choice: `rollback_tracker_release`
+reaches customer pages only as fast as that entry expires. It matches the config
+cache TTL in [tracker-rollout.md](tracker-rollout.md) so the two propagate
+together.
 
 ### Attributes
 
