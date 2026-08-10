@@ -22,8 +22,10 @@ import type { NextConfig } from "next"
  */
 const nextConfig: NextConfig = {
   typedRoutes: true,
-  async headers() {
-    return [
+  // Next expects a promise here, but there is nothing to await: the rules are
+  // static. Resolving directly keeps that honest.
+  headers: () =>
+    Promise.resolve([
       {
         source: "/t/:file(tracker-v[0-9.]+\\.js)",
         headers: [
@@ -44,8 +46,7 @@ const nextConfig: NextConfig = {
           { key: "Access-Control-Allow-Origin", value: "*" },
         ],
       },
-    ]
-  },
+    ]),
 }
 
 export default nextConfig

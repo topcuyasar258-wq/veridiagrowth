@@ -10,6 +10,10 @@ export default tseslint.config(
       "**/.next/**",
       "coverage/**",
       "dist/**",
+      // Built tracker bundles, republished here by tracker:build. Linting a
+      // minified artifact reports on generated code, and because the rules are
+      // type-aware it fails outright on a file no tsconfig covers.
+      "apps/dashboard/public/t/**",
       "apps/dashboard/next-env.d.ts",
     ],
   },
